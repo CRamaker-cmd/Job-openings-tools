@@ -1,0 +1,102 @@
+# Copy to config.yaml and edit:  cp config.example.yaml config.yaml
+# (config.yaml is git-ignored so your contact details stay off GitHub)
+
+db_path: data/jobs.db
+
+profile:
+  name: "Your Name"
+  email: "you@example.com"
+  phone: "+31 6 00000000"
+  linkedin: "https://www.linkedin.com/in/your-profile"
+  github: ""
+  location: "Almere, Netherlands"
+  years_experience: 3
+  pitch: >-
+    At GS1 Nederland I own features end-to-end for a product/location ecosystem with 50k+ users,
+    led a registry-backed GTIN/GLN lookup service with REST APIs, and scaled a location registry
+    backend to tens of thousands of lookups per day.
+  # skill: weight (1-3). Jobs mentioning these score higher. Taken from your CV.
+  skills:
+    "C#": 3
+    ".NET": 3
+    "ASP.NET": 2
+    "Azure": 3
+    "Python": 2
+    "SQL": 2
+    "REST": 1
+    "OData": 1
+    "Vue": 2
+    "JavaScript": 1
+    "TypeScript": 2
+    "Blazor": 1
+    "Docker": 2
+    "Kubernetes": 1
+    "Java": 1
+    "Spring": 1
+    "Cosmos DB": 1
+    "Bicep": 1
+    "Terraform": 1
+    "OAuth": 1
+    "microservices": 1
+    "TDD": 1
+    "DevOps": 1
+
+search:
+  min_salary: 90000          # yearly EUR; postings that state less are dropped
+  max_years_required: 4      # drop postings asking for more years than this
+  max_age_days: 60
+  include_remote: false      # true = also keep "Remote" postings (any country)
+  # title_too_senior etc. have sensible defaults - see jobhunter/config.py
+
+linkedin:
+  enabled: true
+  queries: ["software engineer", "software developer", "backend developer",
+            "full stack developer", ".NET developer", "C# developer", "python developer"]
+  location: Netherlands
+  experience_levels: [2, 3, 4]   # 2=entry 3=associate 4=mid-senior
+  window_days: 7
+  pages_per_query: 3
+  delay_seconds: 3
+
+web:
+  host: 0.0.0.0   # reachable from your home network only - do NOT port-forward this
+  port: 8080
+
+# tier 1 = pays 90k+ (or close) in NL, tier 2 = decent but check the range.
+# NOTE: slugs/IDs below are from public knowledge and could not be tested from the dev sandbox.
+# Run `python -m jobhunter check` on the Pi; fix or `disabled: true` whatever fails.
+companies:
+  # --- custom career-site APIs
+  - {name: Amazon,   ats: amazon,  tier: 1}
+  - {name: Uber,     ats: uber,    tier: 1}
+  # --- Booking.com (Jibe-powered career site)
+  - {name: Booking.com, ats: jibe, host: jobs.booking.com, tier: 1}
+  # --- Lever
+  - {name: Palantir, ats: lever, site: palantir, tier: 1}   # few/no NL roles; harmless
+  # --- Greenhouse
+  - {name: Adyen,      ats: greenhouse, board: adyen,      tier: 1}
+  - {name: Databricks, ats: greenhouse, board: databricks, tier: 1}
+  - {name: Datadog,    ats: greenhouse, board: datadog,    tier: 1}
+  - {name: Elastic,    ats: greenhouse, board: elastic,    tier: 1}
+  - {name: Stripe,     ats: greenhouse, board: stripe,     tier: 1}
+  - {name: MongoDB,    ats: greenhouse, board: mongodb,    tier: 1}
+  - {name: Cloudflare, ats: greenhouse, board: cloudflare, tier: 1}
+  - {name: GitLab,     ats: greenhouse, board: gitlab,     tier: 1}
+  - {name: Twilio,     ats: greenhouse, board: twilio,     tier: 2}
+  - {name: Okta,       ats: greenhouse, board: okta,       tier: 2}
+  # --- Workday (tenant / wd host / site name are in the careers-page URL)
+  - {name: Adobe,      ats: workday, tenant: adobe,      wd: wd5,  site: external_experienced, tier: 1}
+  - {name: Salesforce, ats: workday, tenant: salesforce, wd: wd12, site: External_Career_Site, tier: 1}
+  - {name: NVIDIA,     ats: workday, tenant: nvidia,     wd: wd5,  site: NVIDIAExternalCareerSite, tier: 1}
+  # More: ats: ashby (board:), smartrecruiters (company_id:), lever (site:, eu: true)
+  # Anyone on LinkedIn that isn't listed here is still found, but ranked lower unless pay is stated.
+
+manual_links:
+  - {name: "Google - software engineering, Netherlands", url: "https://www.google.com/about/careers/applications/jobs/results/?location=Netherlands&target_level=EARLY&target_level=MID&q=software"}
+  - {name: "Meta - Amsterdam engineering", url: "https://www.metacareers.com/jobs?offices[0]=Amsterdam%2C%20Netherlands&roles[0]=Software%20Engineer"}
+  - {name: "Apple - software, Netherlands", url: "https://jobs.apple.com/en-nl/search?location=netherlands-NLD&team=software-and-services-SFTWR"}
+  - {name: "Microsoft - software engineering, Netherlands", url: "https://jobs.careers.microsoft.com/global/en/search?lc=Netherlands&p=Software%20Engineering"}
+  - {name: "Netflix - engineering, Amsterdam", url: "https://explore.jobs.netflix.net/careers?query=engineer&location=Amsterdam"}
+  - {name: "Optiver - tech roles", url: "https://optiver.com/working-at-optiver/career-opportunities/?search=software"}
+  - {name: "IMC Trading - tech roles", url: "https://www.imc.com/eu/careers/open-positions/?search=software"}
+  - {name: "LinkedIn - software engineer, NL, last week", url: "https://www.linkedin.com/jobs/search/?keywords=software%20engineer&location=Netherlands&f_TPR=r604800&f_E=2%2C3%2C4"}

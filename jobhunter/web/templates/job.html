@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}{{ job.title }} · {{ job.company }}{% endblock %}
+{% block body %}<script>document.body.dataset.detail=1</script>
+<p><a href="{{ url_for('index') }}">← all jobs</a></p>
+<div class="card">
+ <h2 style="margin:0">{{ job.title }}</h2>
+ <div class="meta">{{ job.company }} · {{ job.location }} · {{ job.level }} · score {{ job.score }} · status <b>{{ job.status }}</b>{% if job.applied_at %} (applied {{ job.applied_at[:10] }}){% endif %}</div>
+ <p>{% if job.pay_confidence=='stated' %}<span class="tag pay">{{ job|salary }}</span>{% elif job.pay_confidence=='likely' %}<span class="tag pay">💰 likely 90k+</span>{% else %}<span class="tag">pay unknown</span>{% endif %}
+ {% for r in job.reasons|fromjson %}<span class="tag">{{ r }}</span>{% endfor %}</p>
+ <div class="row">
+  <a class="btn primary" href="{{ job.url }}" target="_blank" rel="noopener">Open application page ↗</a>
+  {% for s in ['starred','applied','interview','rejected','hidden','new'] %}{% if s!=job.status %}<button onclick="setStatus({{ job.id }},'{{ s }}')">{{ {'new':'Reset','starred':'★ Star','applied':'✓ Applied'}.get(s, s|capitalize) }}</button>{% endif %}{% endfor %}
+ </div>
+</div>
+<div class="card"><h3 style="margin-top:0">Cover letter draft</h3>
+ <textarea id="letter">{{ letter }}</textarea>
+ <div class="row" style="margin-top:8px"><button onclick="copyText('letter',this)">Copy letter</button>
+ <span class="meta">Edit the placeholders in <code>config.yaml</code> (profile + cover_letter) — and always read it through before sending.</span></div></div>
+<div class="card"><h3 style="margin-top:0">Notes</h3>
+ <textarea id="notes" style="min-height:80px" onblur="post('/api/job/{{ job.id }}/notes',{notes:this.value})">{{ job.notes }}</textarea></div>
+<div class="card"><h3 style="margin-top:0">Description</h3>
+ <pre class="desc">{{ job.description or 'No description captured — open the posting.' }}</pre></div>
+{% endblock %}

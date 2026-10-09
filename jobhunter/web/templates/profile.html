@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}My snippets{% endblock %}
+{% block body %}
+<p class="meta">Click to copy — handy when an application form asks for the same details again. Edit them in <code>config.yaml</code>.</p>
+<div class="card"><table>
+{% for label,val in [('Name',p.name),('Email',p.email),('Phone',p.phone),('LinkedIn',p.linkedin),('GitHub',p.github),('Location',p.location),('Years of experience',p.years_experience),('Short pitch',p.pitch)] %}
+<tr><td style="width:150px"><b>{{ label }}</b></td><td id="v{{ loop.index }}">{{ val or '—' }}</td>
+<td style="width:90px"><button onclick="copyText('v{{ loop.index }}',this)">Copy</button></td></tr>{% endfor %}
+</table></div>
+{% endblock %}

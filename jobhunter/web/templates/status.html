@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Sources{% endblock %}
+{% block body %}
+<div class="card"><div class="row"><h3 style="margin:0;flex:1">Last scrape per source</h3>
+{% if running %}<span>⏳ running…</span>{% else %}<form method="post" action="{{ url_for('scrape_now') }}"><button class="primary">Scrape now</button></form>{% endif %}</div>
+<table><tr><th>Source</th><th>When (UTC)</th><th>Result</th></tr>
+{% for r in runs %}<tr><td>{{ r.origin }}</td><td>{{ r.started[:16]|replace('T',' ') }}</td>
+<td>{% if r.ok %}<span class="ok">ok</span> — {{ r.seen }} listed, {{ r.kept }} relevant, {{ r.new }} new{% else %}<span class="fail">failed</span> — {{ r.error }}{% endif %}</td></tr>
+{% else %}<tr><td colspan="3" class="empty">No runs yet.</td></tr>{% endfor %}</table></div>
+<div class="card"><h3 style="margin-top:0">Search these yourself</h3>
+<p class="meta">Companies that don't offer a scrapable public feed (Google, Meta, Apple, Microsoft…): saved searches that open pre-filtered.</p>
+<ul>{% for l in links %}<li><a href="{{ l.url }}" target="_blank" rel="noopener">{{ l.name }}</a></li>{% endfor %}</ul></div>
+<div class="card"><h3 style="margin-top:0">Tracked companies ({{ companies|length }})</h3>
+<p class="meta">{% for c in companies %}{{ c.name }}{{ ', ' if not loop.last }}{% endfor %}</p></div>
+{% endblock %}
