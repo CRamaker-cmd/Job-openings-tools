@@ -58,6 +58,9 @@ def create_app(cfg: dict) -> Flask:
         note = job["pay_note"] or ""
         if conf == "estimated":
             return "pay", f"≈ {rng} typical", f"Reported pay for this company/level ({note}). Not in the posting."
+        if conf == "growth":
+            tail = f" ({rng})" if rng else f" (€{k(job['salary_min'] or job['salary_max'])}–{k(job['salary_max'])})"
+            return "growth", "🌱 junior @ big co" + tail, f"Below €90k, but kept on purpose: {note or 'junior role at a big company'}"
         if conf == "low":
             return "bad", f"⚠ typically {rng}", f"Reported pay is below your minimum ({note})"
         if conf == "likely":

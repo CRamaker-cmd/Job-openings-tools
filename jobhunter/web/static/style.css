@@ -32,3 +32,5 @@ table{width:100%;border-collapse:collapse}td,th{padding:6px 8px;border-bottom:1p
 .stats b{font-size:22px;line-height:1.1}.stats span{color:var(--muted);font-size:12px}
 .stats .grow{flex:1;flex-direction:row;align-items:center;justify-content:flex-end;gap:12px}
 .tag.bad{color:var(--bad);border-color:var(--bad)}
+
+.tag.growth{color:var(--accent);border-color:var(--accent)}

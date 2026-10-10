@@ -31,6 +31,9 @@ DEFAULTS: dict[str, Any] = {
         "include_remote": False,
         "max_years_required": 4,
         "min_salary": 90000,
+        # Junior roles at companies of these tiers skip the salary minimum (growth potential).
+        # [] disables the rule.
+        "junior_pay_waiver_tiers": [1],
         "max_age_days": 60,
         "title_include": [
             r"software", r"developer", r"engineer", r"ontwikkelaar", r"programmeur",
@@ -63,7 +66,8 @@ DEFAULTS: dict[str, Any] = {
     "linkedin": {
         "enabled": True,
         "queries": [
-            "software engineer", "software developer", "backend developer",
+            "software engineer", "junior software engineer", "junior developer",
+            "software developer", "backend developer",
             "full stack developer", ".NET developer", "C# developer", "python developer",
         ],
         "location": "Netherlands",

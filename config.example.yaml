@@ -45,12 +45,15 @@ search:
   min_salary: 90000          # yearly EUR; postings that state less are dropped
   max_years_required: 4      # drop postings asking for more years than this
   max_age_days: 60
+  # Junior roles at tier-1 (big) companies skip the salary minimum - you're taking them for the growth.
+  # Use [] to turn off, or [1, 2] to include tier-2 companies too.
+  junior_pay_waiver_tiers: [1]
   include_remote: false      # true = also keep "Remote" postings (any country)
   # title_too_senior etc. have sensible defaults - see jobhunter/config.py
 
 linkedin:
   enabled: true
-  queries: ["software engineer", "software developer", "backend developer",
+  queries: ["software engineer", "junior software engineer", "junior developer", "software developer", "backend developer",
             "full stack developer", ".NET developer", "C# developer", "python developer"]
   location: Netherlands
   experience_levels: [2, 3, 4]   # 2=entry 3=associate 4=mid-senior

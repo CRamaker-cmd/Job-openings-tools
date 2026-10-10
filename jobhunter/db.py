@@ -184,7 +184,7 @@ class DB:
             where.append("score>=?")
             args.append(min_score)
         if pay == "good":
-            where.append("pay_confidence IN ('stated','estimated','likely')")
+            where.append("pay_confidence IN ('stated','estimated','likely','growth')")
         if level:
             where.append("level=?")
             args.append(level)
@@ -214,7 +214,7 @@ class DB:
         """Headline numbers for the dashboard."""
         day_ago = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat(timespec="seconds")
         q = lambda sql, *a: self.conn.execute(sql, a).fetchone()[0]
-        good = "pay_confidence IN ('stated','estimated','likely')"
+        good = "pay_confidence IN ('stated','estimated','likely','growth')"
         return {
             "new_24h": q(f"SELECT COUNT(*) FROM jobs WHERE active=1 AND status='new' AND first_seen>=? AND {good}", day_ago),
             "top": q(f"SELECT COUNT(*) FROM jobs WHERE active=1 AND status IN ('new','starred') AND score>=75 AND {good}"),
