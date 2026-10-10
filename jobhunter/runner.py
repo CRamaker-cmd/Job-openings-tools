@@ -5,6 +5,7 @@ from dataclasses import dataclass
 
 from . import filters
 from .db import DB, now_iso
+from .salary import Estimator
 from .scrapers import build_scrapers
 from .scrapers.base import Scraper
 from .scrapers.linkedin import Throttled
@@ -19,7 +20,7 @@ class Stats:
     new: int = 0
 
 
-def run_scraper(scraper: Scraper, cfg: dict, db: DB, started: str) -> Stats:
+def run_scraper(scraper: Scraper, cfg: dict, db: DB, started: str, estimator=None) -> Stats:
     stats = Stats()
     for raw in scraper.fetch():
         stats.seen += 1
@@ -36,6 +37,10 @@ def run_scraper(scraper: Scraper, cfg: dict, db: DB, started: str) -> Stats:
         if not ev.ok:
             log.debug("%s: drop %r (%s)", scraper.name, raw.title, ev.reject)
             continue
+        if estimator and ev.salary_max is None:  # no pay in the posting: look up what's usually paid
+            est = estimator.estimate(raw.company, ev.level)
+            if est:
+                ev = filters.evaluate(raw, cfg, estimate=est)
         stats.kept += 1
         stats.new += db.upsert(raw, ev, started)
     return stats
@@ -44,10 +49,11 @@ def run_scraper(scraper: Scraper, cfg: dict, db: DB, started: str) -> Stats:
 def run_all(cfg: dict, db: DB, only: str | None = None) -> list[tuple[str, Stats | Exception]]:
     started = now_iso()
     results = []
+    estimator = Estimator(cfg, db)
     for scraper in build_scrapers(cfg, only):
         log.info("scraping %s ...", scraper.name)
         try:
-            stats = run_scraper(scraper, cfg, db, started)
+            stats = run_scraper(scraper, cfg, db, started, estimator)
         except Exception as e:
             log.error("%s failed: %s", scraper.name, e)
             db.record_run(started, scraper.origin, False, error=str(e)[:300])

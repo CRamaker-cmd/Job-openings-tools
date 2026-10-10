@@ -5,7 +5,7 @@
 <div class="card">
  <h2 style="margin:0">{{ job.title }}</h2>
  <div class="meta">{{ job.company }} · {{ job.location }} · {{ job.level }} · score {{ job.score }} · status <b>{{ job.status }}</b>{% if job.applied_at %} (applied {{ job.applied_at[:10] }}){% endif %}</div>
- <p>{% if job.pay_confidence=='stated' %}<span class="tag pay">{{ job|salary }}</span>{% elif job.pay_confidence=='likely' %}<span class="tag pay">💰 likely 90k+</span>{% else %}<span class="tag">pay unknown</span>{% endif %}
+ <p>{% set pc, pl, pt = job|pay %}<span class="tag {{ pc }}" title="{{ pt }}">{{ pl }}</span> <span class="meta">{{ pt }}</span><br>
  {% for r in job.reasons|fromjson %}<span class="tag">{{ r }}</span>{% endfor %}</p>
  <div class="row">
   <a class="btn primary" href="{{ job.url }}" target="_blank" rel="noopener">Open application page ↗</a>

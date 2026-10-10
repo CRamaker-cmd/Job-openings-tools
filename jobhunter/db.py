@@ -35,6 +35,9 @@ CREATE TABLE IF NOT EXISTS jobs (
     notes TEXT DEFAULT '',
     applied_at TEXT
 );
+CREATE TABLE IF NOT EXISTS salary_cache (
+    key TEXT PRIMARY KEY, lo INTEGER, hi INTEGER, n INTEGER, fetched TEXT NOT NULL
+);
 CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status, active, score DESC);
 CREATE TABLE IF NOT EXISTS runs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -63,6 +66,29 @@ class DB:
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA journal_mode=WAL")
         self.conn.executescript(SCHEMA)
+        self._migrate()
+
+    def _migrate(self) -> None:
+        have = {r["name"] for r in self.conn.execute("PRAGMA table_info(jobs)")}
+        for col, typ in (("est_min", "INTEGER"), ("est_max", "INTEGER"),
+                         ("pay_source", "TEXT"), ("pay_note", "TEXT")):
+            if col not in have:
+                self.conn.execute(f"ALTER TABLE jobs ADD COLUMN {col} {typ}")
+        self.conn.commit()
+
+    # ---------------------------------------------------------- salary lookup cache
+    def salary_cache_get(self, key: str, max_age_days: int):
+        row = self.conn.execute("SELECT * FROM salary_cache WHERE key=?", (key,)).fetchone()
+        if not row:
+            return None
+        age = datetime.now(timezone.utc) - datetime.fromisoformat(row["fetched"])
+        if age > timedelta(days=max_age_days if row["lo"] else min(max_age_days, 14)):
+            return None
+        return row["lo"], row["hi"], row["n"]
+
+    def salary_cache_put(self, key: str, lo: int, hi: int, n: int) -> None:
+        self.conn.execute("INSERT OR REPLACE INTO salary_cache VALUES (?,?,?,?,?)", (key, lo, hi, n, now_iso()))
+        self.conn.commit()
 
     # ---------------------------------------------------------- writes
     def upsert(self, job: RawJob, ev: Evaluation, ts: Optional[str] = None) -> bool:
@@ -72,35 +98,28 @@ class DB:
         row = self.conn.execute("SELECT id, source FROM jobs WHERE fingerprint=?", (fp,)).fetchone()
         reasons = json.dumps(ev.reasons)
         posted = job.posted_at.isoformat() if job.posted_at else None
+        pay = (ev.salary_min, ev.salary_max, ev.pay_confidence, ev.est_min, ev.est_max,
+               ev.pay_source, ev.pay_note, ev.level, ev.score, reasons)
         if row is None:
             self.conn.execute(
-                """INSERT INTO jobs (fingerprint, source, origin, external_id, company, title,
-                   location, url, description, posted_at, first_seen, last_seen, salary_min,
-                   salary_max, pay_confidence, level, score, reasons)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                (fp, job.source, job.origin, job.external_id, job.company, job.title,
-                 job.location, job.url, job.description, posted, ts, ts, ev.salary_min,
-                 ev.salary_max, ev.pay_confidence, ev.level, ev.score, reasons),
+                """INSERT INTO jobs (salary_min, salary_max, pay_confidence, est_min, est_max, pay_source,
+                   pay_note, level, score, reasons, fingerprint, source, origin, external_id, company,
+                   title, location, url, description, posted_at, first_seen, last_seen)
+                   VALUES (?,?,?,?,?,?,?,?,?,?, ?,?,?,?,?,?,?,?,?,?,?,?)""",
+                pay + (fp, job.source, job.origin, job.external_id, job.company, job.title,
+                       job.location, job.url, job.description, posted, ts, ts),
             )
             self.conn.commit()
             return True
         # Same job already known: refresh. A company-site copy replaces a LinkedIn copy.
         better = SOURCE_PRIORITY.get(job.source, 1) > SOURCE_PRIORITY.get(row["source"], 1)
-        common = (ts, ev.salary_min, ev.salary_max, ev.pay_confidence, ev.level, ev.score, reasons)
+        sql = """UPDATE jobs SET active=1, last_seen=?, salary_min=?, salary_max=?, pay_confidence=?,
+                 est_min=?, est_max=?, pay_source=?, pay_note=?, level=?, score=?, reasons=?"""
+        args = (ts,) + pay
         if better:
-            self.conn.execute(
-                """UPDATE jobs SET active=1, last_seen=?, salary_min=?, salary_max=?,
-                   pay_confidence=?, level=?, score=?, reasons=?, source=?, origin=?,
-                   external_id=?, url=?, description=?, location=? WHERE id=?""",
-                common + (job.source, job.origin, job.external_id, job.url, job.description,
-                          job.location, row["id"]),
-            )
-        else:
-            self.conn.execute(
-                """UPDATE jobs SET active=1, last_seen=?, salary_min=?, salary_max=?,
-                   pay_confidence=?, level=?, score=?, reasons=? WHERE id=?""",
-                common + (row["id"],),
-            )
+            sql += ", source=?, origin=?, external_id=?, url=?, description=?, location=?"
+            args += (job.source, job.origin, job.external_id, job.url, job.description, job.location)
+        self.conn.execute(sql + " WHERE id=?", args + (row["id"],))
         self.conn.commit()
         return False
 
@@ -165,7 +184,7 @@ class DB:
             where.append("score>=?")
             args.append(min_score)
         if pay == "good":
-            where.append("pay_confidence IN ('stated','likely')")
+            where.append("pay_confidence IN ('stated','estimated','likely')")
         if level:
             where.append("level=?")
             args.append(level)
@@ -190,6 +209,18 @@ class DB:
         for r in self.conn.execute("SELECT status, COUNT(*) c FROM jobs WHERE active=1 GROUP BY status"):
             out[r["status"]] = r["c"]
         return out
+
+    def summary(self) -> dict:
+        """Headline numbers for the dashboard."""
+        day_ago = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat(timespec="seconds")
+        q = lambda sql, *a: self.conn.execute(sql, a).fetchone()[0]
+        good = "pay_confidence IN ('stated','estimated','likely')"
+        return {
+            "new_24h": q(f"SELECT COUNT(*) FROM jobs WHERE active=1 AND status='new' AND first_seen>=? AND {good}", day_ago),
+            "top": q(f"SELECT COUNT(*) FROM jobs WHERE active=1 AND status IN ('new','starred') AND score>=75 AND {good}"),
+            "applied": q("SELECT COUNT(*) FROM jobs WHERE status IN ('applied','interview')"),
+            "last_run": q("SELECT MAX(started) FROM runs"),
+        }
 
     def last_runs(self) -> list[sqlite3.Row]:
         return self.conn.execute(

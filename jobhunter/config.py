@@ -73,6 +73,18 @@ DEFAULTS: dict[str, Any] = {
         "pages_per_query": 3,
         "delay_seconds": 3.0,
     },
+    "salary": {
+        # Used only when a posting doesn't state pay.
+        "online_lookup": True,        # quick web search for "<company> salary Netherlands"
+        "max_lookups_per_run": 20,
+        "cache_days": 45,
+        "delay_seconds": 3.0,
+        "benchmarks": {},             # extra/overriding {Company: {medior: [lo, hi]}} - see salary_benchmarks.yaml
+    },
+    "browser": {
+        "executable": None,           # path to chromium; None = Playwright's own download
+        "delay_seconds": 2.0,
+    },
     "companies": [],
     "manual_links": [],
     "cover_letter": (

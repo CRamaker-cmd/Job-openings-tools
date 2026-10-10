@@ -131,10 +131,14 @@ class Evaluation:
     reject: str = ""
     score: int = 0
     level: str = "unspecified"
-    pay_confidence: str = "unknown"  # stated | likely | unknown
+    pay_confidence: str = "unknown"  # stated | estimated | likely (assumed) | low | unknown
     salary_min: Optional[int] = None
     salary_max: Optional[int] = None
     years: Optional[int] = None
+    est_min: Optional[int] = None
+    est_max: Optional[int] = None
+    pay_source: str = ""
+    pay_note: str = ""
     matched_skills: list[str] = field(default_factory=list)
     reasons: list[str] = field(default_factory=list)
 
@@ -155,7 +159,7 @@ def prefilter(job: RawJob, cfg: dict) -> bool:
     return ok and location_ok(job.location, cfg, strict=False)
 
 
-def evaluate(job: RawJob, cfg: dict, now: Optional[datetime] = None) -> Evaluation:
+def evaluate(job: RawJob, cfg: dict, now: Optional[datetime] = None, estimate=None) -> Evaluation:
     s = cfg["search"]
     now = now or datetime.now(timezone.utc)
 
@@ -184,7 +188,7 @@ def evaluate(job: RawJob, cfg: dict, now: Optional[datetime] = None) -> Evaluati
         return Evaluation(False, f"pays up to {sal_max}")
 
     ev = Evaluation(True, years=years, salary_min=sal_min, salary_max=sal_max)
-    score = 40
+    score = 30
 
     ev.level = title_level(job.title, cfg)
     if ev.level in ("junior", "medior"):
@@ -194,17 +198,31 @@ def evaluate(job: RawJob, cfg: dict, now: Optional[datetime] = None) -> Evaluati
         score += 5
 
     tier = company_tier(job.company, cfg)
-    if sal_max is not None:  # and >= min, otherwise rejected above
-        ev.pay_confidence = "stated"
+    min_sal = s["min_salary"]
+    if sal_max is not None:  # stated and >= min, otherwise rejected above
+        ev.pay_confidence, ev.pay_source = "stated", "posting"
         score += 15
         ev.reasons.append(f"salary stated €{sal_min // 1000}k-{sal_max // 1000}k")
+    elif estimate is not None:  # reported pay for this company/level beats guessing from company size
+        ev.est_min, ev.est_max = estimate.lo, estimate.hi
+        ev.pay_source, ev.pay_note = estimate.source, estimate.note
+        rng = f"€{estimate.lo // 1000}k-{estimate.hi // 1000}k"
+        if (estimate.lo + estimate.hi) / 2 >= min_sal:  # midpoint, not the optimistic top end
+            ev.pay_confidence = "estimated"
+            score += 15
+            ev.reasons.append(f"typically {rng} ({estimate.source})")
+        else:
+            ev.pay_confidence = "low"
+            score -= 20
+            ev.reasons.append(f"typically only {rng} ({estimate.source})")
     elif tier == 1:
-        ev.pay_confidence = "likely"
-        score += 15
-        ev.reasons.append("high-paying company")
+        ev.pay_confidence, ev.pay_source = "likely", "assumed"
+        ev.pay_note = "assumed: large international tech company"
+        score += 10
+        ev.reasons.append("high-paying company (assumed)")
     elif tier == 2:
-        ev.pay_confidence = "likely"
-        score += 5
+        ev.pay_confidence, ev.pay_source = "likely", "assumed"
+        score += 3
     else:
         score -= 10
 

@@ -46,6 +46,24 @@ def create_app(cfg: dict) -> Flask:
             return f"€{lo // 1000}k–{hi // 1000}k" if lo != hi else f"€{hi // 1000}k"
         return ""
 
+    @app.template_filter("pay")
+    def pay(job):
+        """-> (css class, label, tooltip) describing where the pay figure comes from."""
+        k = lambda n: f"{n // 1000}k"
+        conf = job["pay_confidence"]
+        if conf == "stated":
+            lo, hi = job["salary_min"] or job["salary_max"], job["salary_max"]
+            return "pay", f"€{k(lo)}–{k(hi)}" if lo != hi else f"€{k(hi)}", "Stated in the job posting"
+        rng = f"€{k(job['est_min'])}–{k(job['est_max'])}" if job["est_max"] else ""
+        note = job["pay_note"] or ""
+        if conf == "estimated":
+            return "pay", f"≈ {rng} typical", f"Reported pay for this company/level ({note}). Not in the posting."
+        if conf == "low":
+            return "bad", f"⚠ typically {rng}", f"Reported pay is below your minimum ({note})"
+        if conf == "likely":
+            return "pay", "💰 likely 90k+ (assumed)", "No pay data found; assumed from company size"
+        return "", "pay unknown", "No pay in the posting and no data found"
+
     @app.get("/")
     def index():
         f = {
@@ -59,7 +77,7 @@ def create_app(cfg: dict) -> Flask:
         }
         jobs = db.list_jobs(**f)
         return render_template("index.html", jobs=jobs, f=f, companies=db.companies(),
-                               counts=db.counts(), statuses=STATUSES, running=state["running"])
+                               counts=db.counts(), summary=db.summary(), statuses=STATUSES, running=state["running"])
 
     @app.get("/job/<int:job_id>")
     def job_page(job_id):

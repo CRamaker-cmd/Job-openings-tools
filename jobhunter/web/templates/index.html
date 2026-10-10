@@ -1,5 +1,13 @@
 {% extends "base.html" %}
 {% block body %}
+<div class="stats">
+ <div><b>{{ summary.new_24h }}</b><span>new in 24h</span></div>
+ <div><b>{{ summary.top }}</b><span>strong matches (75+)</span></div>
+ <div><b>{{ counts.starred }}</b><span>starred</span></div>
+ <div><b>{{ summary.applied }}</b><span>applied / interviewing</span></div>
+ <div class="grow"><span>Last scrape: {{ summary.last_run[:16]|replace('T',' ') if summary.last_run else 'never' }} UTC</span>
+  {% if running %}⏳ scraping…{% else %}<form method="post" action="{{ url_for('scrape_now') }}"><button>Scrape now</button></form>{% endif %}</div>
+</div>
 <div class="tabs">
 {% for s,label in [('open','Open'),('starred','★ Starred'),('applied','Applied'),('interview','Interview'),('rejected','Rejected'),('hidden','Hidden'),('all','All')] %}
 <a class="{{ 'on' if f.status==s }}" href="{{ url_for('index', status=s, pay=f.pay) }}">{{ label }}{% if counts.get(s) %} ({{ counts[s] }}){% endif %}</a>
@@ -9,7 +17,7 @@
 <input name="q" placeholder="Search title, company, text…" value="{{ f.q }}">
 <select name="company"><option value="">All companies</option>{% for c in companies %}<option {{ 'selected' if c==f.company }}>{{ c }}</option>{% endfor %}</select>
 <select name="level"><option value="">Any level</option>{% for l in ['junior','medior','unspecified'] %}<option {{ 'selected' if l==f.level }}>{{ l }}</option>{% endfor %}</select>
-<select name="pay"><option value="good" {{ 'selected' if f.pay=='good' }}>Pay 90k+ (stated/likely)</option><option value="all" {{ 'selected' if f.pay=='all' }}>Any / unknown pay</option></select>
+<select name="pay"><option value="good" {{ 'selected' if f.pay=='good' }}>Pay 90k+ (stated / typical / assumed)</option><option value="all" {{ 'selected' if f.pay=='all' }}>Everything (incl. unknown / low pay)</option></select>
 <select name="min_score">{% for n in [0,50,60,70,80] %}<option value="{{ n }}" {{ 'selected' if n==f.min_score }}>Score ≥ {{ n }}</option>{% endfor %}</select>
 <select name="sort">{% for k,l in [('score','Best match'),('new','Newest found'),('posted','Posted date'),('company','Company')] %}<option value="{{ k }}" {{ 'selected' if k==f.sort }}>{{ l }}</option>{% endfor %}</select>
 <button class="primary">Filter</button></form>
@@ -21,9 +29,9 @@
   <a class="title" href="{{ url_for('job_page', job_id=j.id) }}">{{ j.title }}</a>
   <div class="meta">{{ j.company }} · {{ j.location }}{% if j.posted_at %} · posted {{ j.posted_at[:10] }}{% endif %} · via {{ j.source }}</div>
   <div>
-   {% if j.pay_confidence=='stated' %}<span class="tag pay">{{ j|salary }}</span>{% elif j.pay_confidence=='likely' %}<span class="tag pay">💰 likely 90k+</span>{% else %}<span class="tag">pay unknown</span>{% endif %}
+   {% set pc, pl, pt = j|pay %}<span class="tag {{ pc }}" title="{{ pt }}">{{ pl }}</span>
    <span class="tag">{{ j.level }}</span>
-   {% for r in (j.reasons|fromjson)[:3] %}{% if not r.startswith('salary') and r!='high-paying company' and not r.endswith('role') %}<span class="tag">{{ r }}</span>{% endif %}{% endfor %}
+   {% for r in (j.reasons|fromjson)[:3] %}{% if not r.startswith(('salary','typically')) and 'high-paying' not in r and not r.endswith('role') %}<span class="tag">{{ r }}</span>{% endif %}{% endfor %}
   </div>
  </div>
  <div class="actions">
