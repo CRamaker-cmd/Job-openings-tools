@@ -50,7 +50,7 @@ The only "cost" is the Pi's electricity.
 ## Filtering and ranking
 
 Drops senior/staff/principal/lead/manager, interns, non-software roles, jobs outside NL, postings asking for more than
-`max_years_required` years, and postings that **state** a salary below `min_salary` (except junior roles at big companies, see below). The rest are scored (0-100) on
+`max_years_required` years, and postings that **state** a salary below `min_salary` (lower floor for big companies, see below). The rest are scored (0-100) on
 junior/medior wording, your skills (weighted, from `config.yaml`), pay, company and freshness. The same job on LinkedIn
 and a company site is merged (company link wins).
 
@@ -63,7 +63,7 @@ Most postings don't state one. The 90k minimum is only a hard rule when a salary
 | `€95k-120k` | stated in the posting - used as-is |
 | `≈ €105k-125k typical` | reported pay for that company + level: first `jobhunter/salary_benchmarks.yaml`, then a quick **web search** (`"<company> software engineer salary Netherlands glassdoor levels.fyi"`) whose result snippets are scanned for EUR figures; cached for 45 days so only a few lookups happen per run. Counts as OK when the **midpoint** of the range reaches `min_salary`. |
 | `💰 likely 90k+ (assumed)` | nothing found, but it's a `tier: 1` (large international tech) company in your config |
-| `🌱 junior @ big co (€x-y)` | pay is below your minimum (stated or reported), but it's a **junior role at a tier-1 company** - kept on purpose for the growth potential. Turn off with `search.junior_pay_waiver_tiers: []`, or add tier 2 with `[1, 2]`. |
+| `🌱 big co, under 90k (€x-y)` | pay is below your minimum (stated or reported) but at or above `big_company_min_salary` (default €70k), and it's a **tier-1 (big) company** - kept on purpose for the career potential, any title. Change the floor, or `big_company_tiers: []` to turn off, `[1, 2]` to include tier 2. |
 | `⚠ typically €x-y` | data says it's below your minimum - ranked down, hidden by default, not deleted |
 | `pay unknown` | no data, not a tier-1 company - hidden by default |
 

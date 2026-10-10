@@ -80,7 +80,7 @@ def test_evaluate_good_job(cfg):
 def test_evaluate_rejects(cfg):
     assert evaluate(job(location="London, UK"), cfg).reject == "not in the Netherlands"
     assert "years" in evaluate(job(description="8+ years of experience required"), cfg).reject
-    assert "pays" in evaluate(job(description="Salary €60.000 - €75.000"), cfg).reject
+    assert "pays" in evaluate(job(description="Salary €50.000 - €60.000"), cfg).reject
     old = datetime.now(timezone.utc) - timedelta(days=200)
     assert evaluate(job(posted_at=old), cfg).reject == "too old"
 

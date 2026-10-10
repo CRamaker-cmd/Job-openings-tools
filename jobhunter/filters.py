@@ -131,7 +131,7 @@ class Evaluation:
     reject: str = ""
     score: int = 0
     level: str = "unspecified"
-    pay_confidence: str = "unknown"  # stated | estimated | likely (assumed) | growth (junior at big co, below min) | low | unknown
+    pay_confidence: str = "unknown"  # stated | estimated | likely (assumed) | growth (big co, below usual min) | low | unknown
     salary_min: Optional[int] = None
     salary_max: Optional[int] = None
     years: Optional[int] = None
@@ -183,13 +183,14 @@ def evaluate(job: RawJob, cfg: dict, now: Optional[datetime] = None, estimate=No
 
     level = title_level(job.title, cfg)
     tier = company_tier(job.company, cfg)
-    # Junior roles at big companies are worth it for the growth, so the pay minimum doesn't apply to them.
-    waive = level == "junior" and tier in s["junior_pay_waiver_tiers"]
+    # At big companies (career potential) a somewhat lower salary is acceptable: a lower floor applies.
+    big = tier in s["big_company_tiers"]
+    floor = min(s["big_company_min_salary"], s["min_salary"]) if big else s["min_salary"]
 
     sal_min, sal_max = job.salary_min, job.salary_max
     if sal_min is None:
         sal_min, sal_max = parse_salary(job.description)
-    if sal_max is not None and sal_max < s["min_salary"] and not waive:
+    if sal_max is not None and sal_max < floor:
         return Evaluation(False, f"pays up to {sal_max}")
 
     ev = Evaluation(True, years=years, salary_min=sal_min, salary_max=sal_max)
@@ -203,14 +204,14 @@ def evaluate(job: RawJob, cfg: dict, now: Optional[datetime] = None, estimate=No
         score += 5
 
     min_sal = s["min_salary"]
-    if sal_max is not None:  # stated; if below the minimum we only get here via the junior waiver
+    if sal_max is not None:  # stated; if below the usual minimum we only get here via the big-company floor
         ev.pay_source = "posting"
         rng = f"€{sal_min // 1000}k-{sal_max // 1000}k"
-        if sal_max < min_sal:
+        if sal_max < min_sal:  # between the big-company floor and the normal minimum
             ev.pay_confidence = "growth"
-            ev.pay_note = "below your minimum, accepted: junior role at a big company"
+            ev.pay_note = "below your usual minimum, accepted: big company with career potential"
             score += 5
-            ev.reasons.append(f"junior at big company, salary stated {rng}")
+            ev.reasons.append(f"big company, salary stated {rng}")
         else:
             ev.pay_confidence = "stated"
             score += 15
@@ -223,11 +224,11 @@ def evaluate(job: RawJob, cfg: dict, now: Optional[datetime] = None, estimate=No
             ev.pay_confidence = "estimated"
             score += 15
             ev.reasons.append(f"typically {rng} ({estimate.source})")
-        elif waive:
+        elif big and (estimate.lo + estimate.hi) / 2 >= floor:
             ev.pay_confidence = "growth"
-            ev.pay_note = f"{estimate.note}; below your minimum, accepted: junior role at a big company"
+            ev.pay_note = f"{estimate.note}; below your usual minimum, accepted: big company with career potential"
             score += 5
-            ev.reasons.append(f"junior at big company, typically {rng} ({estimate.source})")
+            ev.reasons.append(f"big company, typically {rng} ({estimate.source})")
         else:
             ev.pay_confidence = "low"
             score -= 20

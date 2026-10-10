@@ -17,7 +17,7 @@
 <input name="q" placeholder="Search title, company, text…" value="{{ f.q }}">
 <select name="company"><option value="">All companies</option>{% for c in companies %}<option {{ 'selected' if c==f.company }}>{{ c }}</option>{% endfor %}</select>
 <select name="level"><option value="">Any level</option>{% for l in ['junior','medior','unspecified'] %}<option {{ 'selected' if l==f.level }}>{{ l }}</option>{% endfor %}</select>
-<select name="pay"><option value="good" {{ 'selected' if f.pay=='good' }}>Pay OK (90k+, or junior at big co)</option><option value="all" {{ 'selected' if f.pay=='all' }}>Everything (incl. unknown / low pay)</option></select>
+<select name="pay"><option value="good" {{ 'selected' if f.pay=='good' }}>Pay OK (90k+, or big co ≥ floor)</option><option value="all" {{ 'selected' if f.pay=='all' }}>Everything (incl. unknown / low pay)</option></select>
 <select name="min_score">{% for n in [0,50,60,70,80] %}<option value="{{ n }}" {{ 'selected' if n==f.min_score }}>Score ≥ {{ n }}</option>{% endfor %}</select>
 <select name="sort">{% for k,l in [('score','Best match'),('new','Newest found'),('posted','Posted date'),('company','Company')] %}<option value="{{ k }}" {{ 'selected' if k==f.sort }}>{{ l }}</option>{% endfor %}</select>
 <button class="primary">Filter</button></form>

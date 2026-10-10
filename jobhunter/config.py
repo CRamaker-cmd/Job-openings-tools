@@ -31,9 +31,10 @@ DEFAULTS: dict[str, Any] = {
         "include_remote": False,
         "max_years_required": 4,
         "min_salary": 90000,
-        # Junior roles at companies of these tiers skip the salary minimum (growth potential).
-        # [] disables the rule.
-        "junior_pay_waiver_tiers": [1],
+        # Companies of these tiers (see `companies:`) are worth a somewhat lower salary for the career
+        # potential: for them the minimum is big_company_min_salary instead of min_salary. [] disables.
+        "big_company_tiers": [1],
+        "big_company_min_salary": 70000,
         "max_age_days": 60,
         "title_include": [
             r"software", r"developer", r"engineer", r"ontwikkelaar", r"programmeur",

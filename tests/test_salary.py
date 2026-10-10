@@ -86,24 +86,27 @@ def test_evaluate_with_estimates():
     assert stated.pay_confidence == "stated"  # the posting itself always wins
 
 
-def test_junior_at_big_company_skips_pay_minimum():
+def test_big_company_accepts_somewhat_lower_pay_for_any_title():
     cfg = load_config("config.example.yaml")
-    low = PayEstimate(66000, 90000, "benchmark")
-    # junior @ tier-1 company with below-minimum reported pay: kept, flagged "growth", not "low"
-    jr = evaluate(job("Booking.com", title="Junior Software Engineer"), cfg, estimate=low)
-    assert jr.ok and jr.pay_confidence == "growth" and "big company" in jr.reasons[-2] + jr.reasons[0]
-    # same pay but medior, or junior at an unknown company: still penalised / unchanged
-    assert evaluate(job("Booking.com", title="Software Engineer II"), cfg, estimate=low).pay_confidence == "low"
-    assert evaluate(job("Nobody BV", title="Junior Software Engineer"), cfg, estimate=low).pay_confidence == "low"
-    # a *stated* low salary is rejected normally, but kept for junior at a big company
-    desc = "Salary €50.000 - €60.000 per year"
-    assert not evaluate(job("Nobody BV", title="Junior Software Engineer", description=desc), cfg).ok
-    assert not evaluate(job("Booking.com", title="Software Engineer II", description=desc), cfg).ok
-    stated = evaluate(job("Booking.com", title="Junior Software Engineer", description=desc), cfg)
-    assert stated.ok and stated.pay_confidence == "growth"
-    # growth ranks below a genuinely well-paid match, above a low-pay one
-    good = evaluate(job("Booking.com", title="Junior Software Engineer"), cfg, estimate=PayEstimate(95000, 120000, "benchmark"))
-    assert good.score > jr.score
-    # rule can be turned off
-    cfg["search"]["junior_pay_waiver_tiers"] = []
-    assert evaluate(job("Booking.com", title="Junior Software Engineer"), cfg, estimate=low).pay_confidence == "low"
+    low = PayEstimate(66000, 90000, "benchmark")  # midpoint 78k: under 90k but over the 70k floor
+    # big company: kept and flagged "growth", whatever the title (medior or junior)
+    for title in ("Software Engineer II", "Junior Software Engineer", "Backend Engineer"):
+        assert evaluate(job("Booking.com", title=title), cfg, estimate=low).pay_confidence == "growth"
+    # an unknown company gets no leniency
+    assert evaluate(job("Nobody BV", title="Software Engineer II"), cfg, estimate=low).pay_confidence == "low"
+    # below the big-company floor it is "low" again
+    assert evaluate(job("Booking.com"), cfg, estimate=PayEstimate(50000, 60000, "online")).pay_confidence == "low"
+    # stated salaries: 80k at a big company passes, 80k elsewhere and 60k anywhere is dropped
+    d80, d60 = "Salary €75.000 - €80.000 per year", "Salary €55.000 - €60.000 per year"
+    ok = evaluate(job("Booking.com", title="Software Engineer", description=d80), cfg)
+    assert ok.ok and ok.pay_confidence == "growth"
+    assert not evaluate(job("Nobody BV", description=d80), cfg).ok
+    assert not evaluate(job("Booking.com", description=d60), cfg).ok
+    # real 90k+ still ranks above the compromise
+    good = evaluate(job("Booking.com"), cfg, estimate=PayEstimate(95000, 120000, "benchmark"))
+    assert good.score > evaluate(job("Booking.com"), cfg, estimate=low).score
+    # switch off / change
+    cfg["search"]["big_company_tiers"] = []
+    assert evaluate(job("Booking.com"), cfg, estimate=low).pay_confidence == "low"
+    cfg["search"]["big_company_tiers"], cfg["search"]["big_company_min_salary"] = [1], 85000
+    assert evaluate(job("Booking.com"), cfg, estimate=low).pay_confidence == "low"
