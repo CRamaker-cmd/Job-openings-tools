@@ -42,7 +42,11 @@ def cmd_serve(args, cfg):
     from .web.app import create_app
     host, port = cfg["web"]["host"], cfg["web"]["port"]
     print(f"Serving on http://{host}:{port}")
-    serve(create_app(cfg), host=host, port=port)
+    try:
+        serve(create_app(cfg), host=host, port=port)
+    except OSError as e:
+        sys.exit(f"Cannot listen on port {port} ({e.strerror}). Is something else (e.g. Pi-hole) using it? "
+                 f"Set a free port in config.yaml under web: port:")
 
 
 def cmd_export(args, cfg):

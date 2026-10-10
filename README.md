@@ -7,7 +7,7 @@ to review, apply and track.
 
 ## The dashboard
 
-Everything happens in one local web page (`http://<pi>.local:8080`) - there's nothing else to open.
+Everything happens in one local web page (`http://<pi>.local:8787`) - there's nothing else to open.
 
 ![dashboard](docs/dashboard.png)
 
@@ -81,7 +81,7 @@ cp config.example.yaml config.yaml && nano config.yaml   # your name/email/phone
 .venv/bin/python -m jobhunter check                       # IMPORTANT: which company feeds respond?
 ```
 
-Open `http://<pi-hostname>.local:8080`. There is no login - keep it on your home network, don't port-forward it.
+Open `http://<pi-hostname>.local:8787`. There is no login - keep it on your home network, don't port-forward it.
 
 Manual use: `python -m jobhunter scrape [--only adyen]`, `serve`, `check`, `export > jobs.csv`.
 
