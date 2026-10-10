@@ -139,12 +139,17 @@ git checkout claude/job-hunter-app        # needed only until the latest pull re
 
 ## Step 6: Create the data folder on the drive
 
+> **Use your own mount point from step 1, not the example `/mnt/ssd`.** If you create `/mnt/ssd/jobhunter` while the drive is *not*
+> actually mounted at `/mnt/ssd`, you just make a folder on the SD card.
+
 The container runs as user id **1000**, so that user must own the folder:
 ```bash
 sudo mkdir -p /mnt/ssd/jobhunter
 sudo chown 1000:1000 /mnt/ssd/jobhunter
-ls -ldn /mnt/ssd/jobhunter                # expect: drwxr-xr-x 2 1000 1000 ...
+./deploy/check-drive.sh /mnt/ssd/jobhunter      # from the project folder: confirms it is really on the drive
 ```
+Every line should start with ✓ (a "!" about an unusual filesystem is only a note). The script tells you what to fix if not, and lists
+your mounted drives when the folder doesn't exist.
 
 ## Step 7: Tell Docker to use that folder
 
@@ -161,6 +166,7 @@ Save (`Ctrl+O`, Enter, `Ctrl+X`). Check it was understood:
 ```bash
 docker compose config | grep -B1 -A4 "type: bind"       # expect source: /mnt/ssd/jobhunter  target: /app/data
 sudo ss -ltnp | grep 8585 || echo "port 8585 is free"   # expect: port 8585 is free
+./deploy/check-drive.sh                                  # reads JOBHUNTER_DATA from .env; every line should be ✓
 ```
 Port 8585 is the app's default. (Taken? Change the **left** number in the `ports:` line of `compose.yaml`.)
 
@@ -231,7 +237,7 @@ then `cd ~/Job-openings-tools && docker compose up -d`.
 
 | Symptom | Cause and fix |
 |---|---|
-| `docker compose up` says `bind source path does not exist` | The drive isn't mounted or the folder is missing: redo steps 2 and 6. |
+| `docker compose up` says `bind source path does not exist` | The folder in `.env` doesn't exist: the drive isn't mounted there, the mount point is different (you used the example `/mnt/ssd`), or step 6 was skipped. Run `./deploy/check-drive.sh` (it lists your drives), fix the path in `.env` / create the folder, then `docker compose up -d` again (no rebuild needed). |
 | Container keeps restarting; logs say "data folder ... is not writable" | Wrong owner: `sudo chown 1000:1000 /mnt/ssd/jobhunter`, then `docker compose up -d`. |
 | `required variable JOBHUNTER_DATA is missing` | `.env` is missing or misspelled (step 7). Run commands from inside the project folder. |
 | `permission denied` talking to Docker | Log out/in after `usermod -aG docker` (step 3), or use `sudo`. |

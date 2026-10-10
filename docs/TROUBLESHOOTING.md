@@ -51,6 +51,9 @@ Only postings we haven't seen are processed. A re-opened role counts as new when
 the app can't tell, so delete the old job (🗑) to make it re-check. Rejected postings are remembered for 30 days; changing a
 matching rule clears that memory.
 
+## Docker: "bind source path does not exist"
+The data folder you set in `.env` (`JOBHUNTER_DATA`) doesn't exist. This is intentional protection: the container won't start rather than write to the SD card. Run `./deploy/check-drive.sh` — it says whether the folder is missing, whether the drive is mounted somewhere else, the filesystem type and the owner. Then `docker compose up -d` (no rebuild needed). See [SETUP_PI.md](SETUP_PI.md).
+
 ## Starting over
 Stop the app and delete `data/jobs.db` (this erases jobs, notes **and** dashboard settings). To only undo settings use the *Reset*
 buttons.
