@@ -1,13 +1,15 @@
-# Copy to config.yaml and edit:  cp config.example.yaml config.yaml
-# (config.yaml is git-ignored so your contact details stay off GitHub)
+# Copy to config.yaml:  cp config.example.yaml config.yaml
+# Almost everything here can also be changed later in the web UI (Settings / Companies pages); values changed
+# there are stored in the database and win over this file. This file is the starting point and the home of
+# settings that need a restart (web: host/port, db_path).
 
 db_path: data/jobs.db
 
 profile:
-  name: "Your Name"
-  email: "you@example.com"
-  phone: "+31 6 00000000"
-  linkedin: "https://www.linkedin.com/in/your-profile"
+  name: ""
+  email: ""
+  phone: ""
+  linkedin: ""
   github: ""
   location: "Almere, Netherlands"
   years_experience: 3

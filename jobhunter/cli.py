@@ -43,7 +43,7 @@ def cmd_serve(args, cfg):
     host, port = cfg["web"]["host"], cfg["web"]["port"]
     print(f"Serving on http://{host}:{port}")
     try:
-        serve(create_app(cfg), host=host, port=port)
+        serve(create_app(cfg, scheduler_enabled=True), host=host, port=port)
     except OSError as e:
         sys.exit(f"Cannot listen on port {port} ({e.strerror}). Is something else (e.g. Pi-hole) using it? "
                  f"Set a free port in config.yaml under web: port:")

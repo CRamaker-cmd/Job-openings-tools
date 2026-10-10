@@ -86,6 +86,7 @@ DEFAULTS: dict[str, Any] = {
         "delay_seconds": 3.0,
         "benchmarks": {},             # extra/overriding {Company: {medior: [lo, hi]}} - see salary_benchmarks.yaml
     },
+    "schedule": {"enabled": True, "every_hours": 6},
     "browser": {
         "executable": None,           # path to chromium; None = Playwright's own download
         "delay_seconds": 2.0,
@@ -116,7 +117,8 @@ def _merge(base: dict, over: dict) -> dict:
     return out
 
 
-def load_config(path: str | Path | None = None) -> dict[str, Any]:
+def load_base(path: str | Path | None = None) -> dict[str, Any]:
+    """Defaults + config.yaml, WITHOUT the settings edited on the dashboard."""
     path = Path(path) if path else ROOT / "config.yaml"
     user: dict = {}
     if path.exists():
@@ -125,4 +127,14 @@ def load_config(path: str | Path | None = None) -> dict[str, Any]:
     db = Path(cfg["db_path"])
     if not db.is_absolute():
         cfg["db_path"] = str(ROOT / db)
+    cfg["_config_path"] = str(path)
+    return cfg
+
+
+def load_config(path: str | Path | None = None) -> dict[str, Any]:
+    """The effective config: base + settings edited on the dashboard (stored in the DB)."""
+    from .settings import apply_overrides, read_overrides
+
+    cfg = load_base(path)
+    apply_overrides(cfg, read_overrides(cfg["db_path"]))
     return cfg

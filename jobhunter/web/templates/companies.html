@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Companies{% endblock %}
+{% block body %}
+<h2 style="margin-top:0">Companies</h2>
+<p class="meta">Employers whose career pages are searched directly. Jobs from LinkedIn are found on top of this.
+ <b>Tier 1</b> = big / high-paying: unknown pay is assumed fine and a lower minimum salary applies
+ (<a href="{{ url_for('settings_page', section='matching') }}">Settings → Matching</a>). <b>Tier 2</b> = decent, check the range.</p>
+<div class="row" style="margin-bottom:12px"><a class="btn primary" href="{{ url_for('companies_page', edit='new') }}">+ Add a company</a>
+ {% if modified %}<form method="post" action="{{ url_for('companies_reset') }}" onsubmit="return confirm('Discard your changes and restore the default list?')"><button class="linkish">↺ Restore default list</button></form>{% endif %}</div>
+
+{% if entry is not none %}
+<div class="card" id="editor"><h3 style="margin-top:0">{{ 'Edit ' + entry.name if idx is not none else 'Add a company' }}</h3>
+<form method="post" action="{{ url_for('companies_save') }}">
+ <input type="hidden" name="idx" value="{{ idx if idx is not none }}">
+ <div class="grid2">
+  <label>Name<br><input name="name" value="{{ entry.get('name','') }}" required style="width:100%" placeholder="Adyen"></label>
+  <label>Tier<br><select name="tier">{% for t, lab in tiers.items() %}<option value="{{ t }}" {{ 'selected' if entry.get('tier',1)==t }}>{{ lab }}</option>{% endfor %}</select></label>
+  <label>Career-site type<br><select name="ats" id="ats" onchange="showAts()">{% for k, a in ats.items() %}<option value="{{ k }}" {{ 'selected' if entry.get('ats')==k }}>{{ a.label }}</option>{% endfor %}</select></label>
+ </div>
+ {% for k, a in ats.items() %}
+ <fieldset class="ats-f" data-ats="{{ k }}"><legend class="meta">{{ a.label }}</legend>
+  <p class="meta">{{ a.how|safe }}</p>
+  {% for key, label, required, help in a.fields %}
+   {% if key == 'eu' %}<label class="chk"><input type="checkbox" name="eu" {{ 'checked' if entry.get('eu') }}> {{ label }}</label>
+   {% else %}<label>{{ label }}{{ ' *' if required }}<br><input name="{{ key }}" value="{{ entry.get(key,'') if entry.get('ats')==k }}" placeholder="{{ help }}" style="width:100%"></label>{% endif %}
+  {% endfor %}
+  {% if k=='browser' and not browser_ok %}<p class="flash err">Browser scraping isn't installed on this machine yet - see the Help page.</p>{% endif %}
+ </fieldset>{% endfor %}
+ <div class="row"><button class="primary">Save company</button><a href="{{ url_for('companies_page') }}">Cancel</a></div>
+</form></div>
+<script>
+function showAts(){const v=document.getElementById('ats').value;document.querySelectorAll('.ats-f').forEach(f=>{const on=f.dataset.ats===v;f.hidden=!on;f.querySelectorAll('input').forEach(i=>i.disabled=!on)})}
+showAts();document.getElementById('editor').scrollIntoView();
+</script>
+{% endif %}
+
+<div class="card" style="padding:0;overflow:auto"><table>
+<tr><th>Company</th><th>Type</th><th>Tier</th><th>Last scrape</th><th></th></tr>
+{% for c in items %}{% set run = runs.get(c.name) %}
+<tr class="{{ 'off' if c.disabled }}"><td><b>{{ c.name }}</b></td><td>{{ ats[c.ats].label if c.ats in ats else c.ats }}</td><td>{{ c.get('tier',1) }}</td>
+ <td>{% if c.disabled %}<span class="meta">paused</span>{% elif run %}{% if run.ok %}<span class="ok">ok</span> <span class="meta">{{ run.kept }} relevant</span>{% else %}<span class="fail" title="{{ run.error }}">failed</span>{% endif %}{% else %}<span class="meta">not yet</span>{% endif %}
+  <span class="testres meta" id="t{{ loop.index0 }}"></span></td>
+ <td class="acts">
+  <button onclick="testCo({{ loop.index0 }},this)" title="Try to read this company's jobs right now">Test</button>
+  <a class="btn" href="{{ url_for('companies_page', edit=loop.index0) }}">Edit</a>
+  <form method="post" action="{{ url_for('companies_toggle', i=loop.index0) }}"><button title="Skip this company without deleting it">{{ 'Resume' if c.disabled else 'Pause' }}</button></form>
+  <form method="post" action="{{ url_for('companies_delete', i=loop.index0) }}" onsubmit="return confirm('Remove {{ c.name }}?')"><button title="Remove">✕</button></form>
+ </td></tr>
+{% else %}<tr><td colspan="5" class="empty">No companies yet - add one above. LinkedIn is still searched.</td></tr>{% endfor %}
+</table></div>
+<script>
+async function testCo(i,btn){const out=document.getElementById('t'+i);btn.disabled=true;out.textContent=' testing… (can take up to a minute)';out.className='testres meta';
+ try{const r=await fetch('/companies/'+i+'/test',{method:'POST'});const j=await r.json();out.textContent=' '+j.message;out.className='testres '+(j.ok?'ok':'fail')}catch(e){out.textContent=' '+e;out.className='testres fail'}btn.disabled=false}
+</script>
+{% endblock %}

@@ -34,3 +34,21 @@ table{width:100%;border-collapse:collapse}td,th{padding:6px 8px;border-bottom:1p
 .tag.bad{color:var(--bad);border-color:var(--bad)}
 
 .tag.growth{color:var(--accent);border-color:var(--accent)}
+header nav a.on{font-weight:700;border-bottom:2px solid var(--accent)}
+.flash{padding:10px 14px;border-radius:10px;margin-bottom:12px;border:1px solid var(--line);background:var(--card)}
+.flash.ok{border-color:var(--good)}.flash.err{border-color:var(--bad);color:var(--bad)}.flash.info{border-color:var(--accent)}
+.setup ol{margin:8px 0;padding-left:4px;list-style:none}.setup li.done{color:var(--muted)}
+.legend{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:8px 14px;margin-bottom:12px}
+.legend summary{cursor:pointer;font-weight:600}.legend .cols{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:10px;font-size:14px;line-height:2}
+@media(max-width:760px){.legend .cols{grid-template-columns:1fr}}
+form.filters{align-items:flex-end}label.f{display:flex;flex-direction:column;font-size:12px;color:var(--muted)}label.f select,label.f input{font-size:14px;color:var(--fg)}
+.settings{display:grid;grid-template-columns:200px 1fr;gap:24px}.settings aside{display:flex;flex-direction:column;gap:2px}
+.settings aside a{padding:6px 10px;border-radius:8px;color:var(--fg)}.settings aside a.on{background:var(--card);border:1px solid var(--line);font-weight:600}
+@media(max-width:760px){.settings{grid-template-columns:1fr}.settings aside{flex-direction:row;flex-wrap:wrap}}
+.field{margin-bottom:18px}.field .help{color:var(--muted);font-size:13px;margin-top:4px}.grp{margin:26px 0 10px;padding-top:10px;border-top:1px solid var(--line)}
+.chk{display:block;margin:2px 0}.mono{font-family:ui-monospace,monospace;font-size:13px}.field textarea{min-height:0}
+.linkish{border:none;background:none;color:var(--accent);padding:0;cursor:pointer}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:12px}
+fieldset.ats-f{border:1px solid var(--line);border-radius:10px;margin-bottom:12px}fieldset label{display:block;margin-bottom:8px}
+td.acts{display:flex;gap:6px;flex-wrap:wrap;align-items:center}td.acts form{margin:0}tr.off{opacity:.55}
+.help-page h2{margin-top:28px}.help-page h3{margin-bottom:4px}.help-page code{background:var(--card);border:1px solid var(--line);padding:0 5px;border-radius:5px}

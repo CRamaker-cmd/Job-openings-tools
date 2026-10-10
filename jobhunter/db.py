@@ -38,6 +38,9 @@ CREATE TABLE IF NOT EXISTS jobs (
 CREATE TABLE IF NOT EXISTS salary_cache (
     key TEXT PRIMARY KEY, lo INTEGER, hi INTEGER, n INTEGER, fetched TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS settings (
+    path TEXT PRIMARY KEY, value TEXT NOT NULL
+);
 CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status, active, score DESC);
 CREATE TABLE IF NOT EXISTS runs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -221,6 +224,9 @@ class DB:
             "applied": q("SELECT COUNT(*) FROM jobs WHERE status IN ('applied','interview')"),
             "last_run": q("SELECT MAX(started) FROM runs"),
         }
+
+    def last_run_started(self) -> Optional[str]:
+        return self.conn.execute("SELECT MAX(started) FROM runs").fetchone()[0]
 
     def last_runs(self) -> list[sqlite3.Row]:
         return self.conn.execute(

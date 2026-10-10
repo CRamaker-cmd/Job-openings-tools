@@ -1,115 +1,87 @@
 # Job Hunter
 
-A small self-hosted job board for a Raspberry Pi. It collects **junior / medior software-engineering
-jobs in the Netherlands** from LinkedIn and from big-tech career sites, drops everything that is too
-senior or pays below your minimum, ranks what's left against your skills, and gives you a web page
-to review, apply and track.
+A self-hosted job board for a Raspberry Pi. It finds **junior / medior software jobs in the Netherlands** on company
+career sites and LinkedIn, removes what doesn't fit (too senior, wrong role, pays too little, outside NL), ranks the rest
+against *your* skills, estimates the pay when a posting doesn't state it, and gives you one dashboard to review, apply
+and keep track.
 
-## The dashboard
-
-Everything happens in one local web page (`http://<pi>.local:8787`) - there's nothing else to open.
+**Free** (no paid APIs or accounts) · **everything configurable from the dashboard** · **self-explanatory UI** with a built-in Help page.
 
 ![dashboard](docs/dashboard.png)
 
-Top strip: new in the last 24h, strong matches, starred, applied. Below it, tabs for each stage
-(Open / Starred / Applied / Interview / Rejected / Hidden) and filters (search, company, level, pay, score).
-Every row shows a 0-100 match score, **where the pay figure comes from**, level, and the skills that matched.
-
-## How applying works (and what it doesn't do)
-
-It **does not submit applications for you.** Application forms are different per company, sit behind logins and
-captchas, and auto-submitting would break site rules and risk sending something wrong under your name.
-What it does to make applying fast:
-
-1. **Apply ↗** opens the company's own application page; when you come back it asks "mark as applied?".
-2. **Details** page: full description, a **cover-letter draft** pre-filled with the company, role, your pitch and the
-   skill that matched (one-click copy), and a notes box.
-3. **My snippets**: copy buttons for name / email / phone / LinkedIn / pitch for form fields.
-4. Status tracking (star / applied / interview / rejected / hide) so you always know what's pending. CSV export.
-
-![job page](docs/job-page.png)
-
-## Cost
-
-**Free.** No paid APIs or keys anywhere: company feeds are public, LinkedIn is its public logged-out search,
-salary lookups use a free web search, and sites without a feed are driven by a headless browser (Playwright, open source).
-The only "cost" is the Pi's electricity.
-
-## Sources
-
-- **Public feeds (fast, reliable):** Greenhouse, Lever, Ashby, SmartRecruiters, Workday, Jibe (Booking.com),
-  Amazon, Uber. Add a company with one line of YAML.
-- **Headless browser (for sites with no feed):** Google, Meta, Apple, Microsoft are pre-configured. It opens the
-  search page with your filters in the URL, runs optional click/fill `steps`, finds job links by URL pattern,
-  pages through the results and opens each relevant posting for the description. Optional install:
-  `pip install -r requirements-browser.txt && playwright install chromium` (or `apt install chromium`
-  and set `browser.executable`). Skipped automatically if not installed. Chromium is the heavy part
-  (~300-500 MB RAM while running) - use a Pi 4/5 with 4 GB+.
-- **LinkedIn:** public search, low volume, with delays; see the caveat below.
-
-## Filtering and ranking
-
-Drops senior/staff/principal/lead/manager, interns, non-software roles, jobs outside NL, postings asking for more than
-`max_years_required` years, and postings that **state** a salary below `min_salary` (lower floor for big companies, see below). The rest are scored (0-100) on
-junior/medior wording, your skills (weighted, from `config.yaml`), pay, company and freshness. The same job on LinkedIn
-and a company site is merged (company link wins).
-
-## What about jobs with no salary?
-
-Most postings don't state one. The 90k minimum is only a hard rule when a salary *is* stated. Otherwise, in order:
-
-| Pay column | Meaning |
-|---|---|
-| `€95k-120k` | stated in the posting - used as-is |
-| `≈ €105k-125k typical` | reported pay for that company + level: first `jobhunter/salary_benchmarks.yaml`, then a quick **web search** (`"<company> software engineer salary Netherlands glassdoor levels.fyi"`) whose result snippets are scanned for EUR figures; cached for 45 days so only a few lookups happen per run. Counts as OK when the **midpoint** of the range reaches `min_salary`. |
-| `💰 likely 90k+ (assumed)` | nothing found, but it's a `tier: 1` (large international tech) company in your config |
-| `🌱 big co, under 90k (€x-y)` | pay is below your minimum (stated or reported) but at or above `big_company_min_salary` (default €70k), and it's a **tier-1 (big) company** - kept on purpose for the career potential, any title. Change the floor, or `big_company_tiers: []` to turn off, `[1, 2]` to include tier 2. |
-| `⚠ typically €x-y` | data says it's below your minimum - ranked down, hidden by default, not deleted |
-| `pay unknown` | no data, not a tier-1 company - hidden by default |
-
-Caveats: Glassdoor/Levels.fyi figures are mostly **total compensation (incl. stock/bonus)**, self-reported and often
-years old; base salary is lower. Glassdoor itself blocks bots (and forbids scraping), so it's only read through search-result
-snippets. If the search engine shows a bot check the lookups stop for that run and fall back to assumptions.
-Add what *you* know to `salary.benchmarks` in `config.yaml` - your entries win.
-
-## Setup (Raspberry Pi)
+## Quick start (Raspberry Pi)
 
 ```bash
 git clone https://github.com/CRamaker-cmd/Job-openings-tools && cd Job-openings-tools
-cp config.example.yaml config.yaml && nano config.yaml   # your name/email/phone/LinkedIn + pitch
-./deploy/install.sh                                       # venv, systemd web service + 6-hourly timer
-.venv/bin/python -m jobhunter check                       # IMPORTANT: which company feeds respond?
+./deploy/install.sh        # creates a venv, installs a systemd service for the web app
 ```
+Open `http://<pi-hostname>.local:8787`, then follow the **Getting started** checklist on the Jobs page:
+fill in your profile → check the companies list → press **Scrape now**. After that it scrapes by itself
+(every 6 hours by default) and you only open the dashboard.
 
-Open `http://<pi-hostname>.local:8787`. There is no login - keep it on your home network, don't port-forward it.
+> The dashboard has no login: keep it on your home network and **never port-forward it**.
+> Port 8787 was chosen to stay clear of Pi-hole; change `web: port:` in `config.yaml` if needed.
 
-Manual use: `python -m jobhunter scrape [--only adyen]`, `serve`, `check`, `export > jobs.csv`.
+Manual run without systemd: `python -m venv .venv && .venv/bin/pip install -r requirements.txt && .venv/bin/python -m jobhunter serve`.
 
-## Tuning
+## What you can do in the dashboard
 
-Everything lives in `config.yaml`: `min_salary`, `max_years_required`, `include_remote`, skills and
-weights, LinkedIn queries, companies (`tier: 1` = pays 90k+, `disabled: true` to skip one).
-To find a company's board: Greenhouse `boards.greenhouse.io/<board>`, Lever `jobs.lever.co/<site>`,
-Ashby `jobs.ashbyhq.com/<board>`, Workday `<tenant>.<wdN>.myworkdayjobs.com/<site>`.
+| Page | |
+|---|---|
+| **Jobs** | Ranked list with filters, pay labels, **Apply ↗**, star / hide, status tracking (new → starred → applied → interview → rejected), stats, setup checklist and a "how to read this" legend. |
+| **Job details** | Description, *why this score*, **cover-letter draft** with copy button, notes, status buttons. |
+| **Companies** | Add / edit / pause / remove / **test** the employers that are searched. |
+| **Settings** | Profile & skills, pay rules, big-company exception, LinkedIn search, pay lookups, schedule, advanced title rules. Saved instantly, each page resettable. |
+| **My snippets** | One-click copy of your details for application forms. |
+| **Status** | Result of the last scrape per source, schedule, manual-search links. |
+| **Help** | How everything works, in the app. |
+
+| | |
+|---|---|
+| ![job page](docs/job-page.png) | ![settings](docs/settings.png) |
+
+## How it decides
+
+- **Drops** senior/staff/principal/lead/manager titles, interns, non-software roles, jobs outside NL, postings asking for more
+  than N years, and postings that **state** a salary below your minimum.
+- **Ranks** (0-100) on junior/medior wording, your weighted skills, pay, company and freshness.
+- **Pay when not stated**: reported-pay table → quick web search (Glassdoor / Levels.fyi / Indeed snippets) → assumption for big
+  companies. Every figure shows its source.
+- **Big-company exception**: you'd take a bit less for career potential, so at Tier 1 companies the minimum drops from €90k to
+  a €70k floor (any job title). Both numbers are settings.
+- **Applying**: the app does **not** auto-submit applications; it opens the company's page and gives you the cover letter, your
+  snippets and tracking. Details in the [user guide](docs/USER_GUIDE.md#3-applying).
+
+## Sources
+
+Public feeds for Greenhouse, Lever, Ashby, SmartRecruiters, Workday, Jibe (Booking.com), Amazon, Uber · a headless browser for
+sites with no feed (Google, Meta, Apple, Microsoft; optional install) · LinkedIn's public search.
+Default companies: Amazon, Uber, Booking.com, Palantir, Adyen, Databricks, Datadog, Elastic, Stripe, MongoDB, Cloudflare, GitLab,
+Twilio, Okta, Adobe, Salesforce, NVIDIA, Google, Meta, Apple, Microsoft. Add any other on the Companies page.
+
+## Documentation
+
+| | |
+|---|---|
+| [docs/USER_GUIDE.md](docs/USER_GUIDE.md) | Walkthrough of every page, scoring and pay labels, applying, companies, privacy |
+| [docs/SETTINGS.md](docs/SETTINGS.md) | Every setting, its default and effect (generated from the code) |
+| [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Failed sources, LinkedIn blocks, pay oddities, port conflicts |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Modules, data flow, design decisions, how to extend (for developers) |
 
 ## Honest caveats
 
-- The company slugs/endpoints in `config.example.yaml` were written from public knowledge and **could not
-  be tested live** (the dev sandbox blocks job sites). Parsers are unit-tested on API-shaped fixtures;
-  run `check` on the Pi and fix/disable whatever fails. Failing sources never break the others.
-- Company feeds change without notice; the *Sources* page shows the last result per source.
-- **LinkedIn's terms forbid scraping.** This uses only the logged-out endpoints, a few requests per run
-  with delays, and stops on throttling. It never uses your account/cookies - keep it that way. It may break
-  or get the Pi's IP temporarily blocked; the company-site sources work without it (`linkedin.enabled: false`).
-- "Assumed 90k+" is a guess, not a fact: reported pay for junior roles at e.g. Booking.com is closer to 66-90k total.
-  Check the posted range (EU pay-transparency rules mean more postings state one).
-- The browser scrapers' URL patterns for Google/Meta/Apple/Microsoft are untested guesses (the sandbox couldn't reach
-  those sites); the engine itself is tested against a local JS-rendered, paginated page. If one finds nothing, open
-  the site, look at a job link's URL and adjust `link_pattern` / `next` in `config.yaml`.
-- The cover letter is a template. Read and personalise it before sending.
+- The default company endpoints and the Google/Meta/Apple/Microsoft link patterns were written from public knowledge and
+  **could not be tested live** (the dev sandbox blocks job sites); parsers are unit-tested on sample payloads and the browser
+  engine on a local JS-rendered page. On your Pi, use **Companies → Test** and fix or pause what fails; a failing source never
+  stops the others.
+- **LinkedIn's terms forbid scraping.** Only the logged-out public search is used, at low volume, never your account; it may
+  break or get your IP blocked for a while. It can be switched off in Settings.
+- Pay figures that aren't *stated* are estimates, mostly total compensation (incl. stock/bonus), self-reported and sometimes old.
+- The cover letter is a template: read and personalise it before sending.
 
 ## Development
 
 ```bash
 python -m venv .venv && .venv/bin/pip install -r requirements-dev.txt && .venv/bin/python -m pytest
+python tools/gen_settings_doc.py      # after changing settings.py, regenerates docs/SETTINGS.md
 ```

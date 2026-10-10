@@ -3,9 +3,20 @@
 <title>{% block title %}Job Hunter{% endblock %}</title>
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"></head><body>
 <header><b>🎯 Job Hunter</b>
-<nav><a href="{{ url_for('index') }}">Jobs</a><a href="{{ url_for('profile') }}">My snippets</a><a href="{{ url_for('status') }}">Sources</a></nav>
-<a href="{{ url_for('export') }}">CSV</a></header>
-<main>{% block body %}{% endblock %}</main>
+<nav>
+ {% set here = request.endpoint %}
+ <a href="{{ url_for('index') }}" class="{{ 'on' if here in ('index','job_page') }}" title="Your ranked list of jobs">Jobs</a>
+ <a href="{{ url_for('companies_page') }}" class="{{ 'on' if here=='companies_page' }}" title="Which employers are searched">Companies</a>
+ <a href="{{ url_for('settings_index') }}" class="{{ 'on' if here in ('settings_page','settings_index') }}" title="Pay, skills, schedule, ...">Settings</a>
+ <a href="{{ url_for('profile') }}" class="{{ 'on' if here=='profile' }}" title="Copy-paste your details into forms">My snippets</a>
+ <a href="{{ url_for('status') }}" class="{{ 'on' if here=='status' }}" title="Did the last scrape work?">Status</a>
+ <a href="{{ url_for('help_page') }}" class="{{ 'on' if here=='help_page' }}">Help</a>
+</nav>
+{% if running %}<span class="tag new">⏳ scraping…</span>{% endif %}
+<a href="{{ url_for('export') }}" title="Download the list as a spreadsheet">CSV</a></header>
+<main>
+{% with msgs = get_flashed_messages(with_categories=true) %}{% for cat, m in msgs %}<div class="flash {{ cat }}">{{ m }}</div>{% endfor %}{% endwith %}
+{% block body %}{% endblock %}</main>
 <script>
 async function post(url, body){const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});return r.ok}
 async function setStatus(id,status,el){if(await post('/api/job/'+id+'/status',{status})){const c=document.getElementById('job-'+id);
