@@ -1,5 +1,7 @@
 # Running with Docker (recommended for a Raspberry Pi)
 
+> Setting this up on a Pi with an external drive? Follow the numbered walk-through in [SETUP_PI.md](SETUP_PI.md). This page is the reference.
+
 Docker keeps everything in one removable bubble: nothing is installed on the Pi itself, the same image runs on a Pi
 (arm64) or any PC/server (amd64), and removing it leaves nothing behind.
 
@@ -12,7 +14,7 @@ curl -fsSL https://get.docker.com | sh && sudo usermod -aG docker $USER      # t
 git clone https://github.com/CRamaker-cmd/Job-openings-tools && cd Job-openings-tools
 docker compose up -d --build        # first build takes a few minutes on a Pi
 ```
-Open `http://<pi-hostname>.local:8787` and follow the **Getting started** checklist. It restarts by itself after a reboot.
+Open `http://<pi-hostname>.local:8585` and follow the **Getting started** checklist. It restarts by itself after a reboot.
 
 ## Everyday commands
 
@@ -22,7 +24,7 @@ Open `http://<pi-hostname>.local:8787` and follow the **Getting started** checkl
 | Stop / start | `docker compose stop` / `docker compose start` |
 | Update to a new version | `git pull && docker compose up -d --build` (your data is kept) |
 | Status and resource use | `docker compose ps` · `docker stats jobhunter` |
-| Change the port | edit the **left** number in `ports:` of `compose.yaml` (e.g. `"8899:8787"`), then `docker compose up -d` |
+| Change the port | edit the **left** number in `ports:` of `compose.yaml` (e.g. `"8899:8585"`), then `docker compose up -d` |
 | Data on an external drive | see [Use an external drive](#use-an-external-drive) |
 | Own config (manual links, db location) | uncomment the `./config.yaml:/app/config.yaml:ro` line in `compose.yaml` |
 

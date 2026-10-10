@@ -8,7 +8,7 @@ The dashboard also has a built-in **Help** page covering the same ground in shor
 
 ## 1. First start
 
-1. Open the dashboard: `http://<your-pi>.local:8787` (port is set in `config.yaml`, see [Settings](SETTINGS.md)).
+1. Open the dashboard: `http://<your-pi>.local:8585` (port is set in `config.yaml`, see [Settings](SETTINGS.md)).
 2. The **Getting started** checklist at the top of the Jobs page walks you through:
    - **Settings → Profile**: name, email, phone, LinkedIn, a 2-3 sentence pitch and your **skills with weights**
      (1 = nice to have, 2 = solid, 3 = core stack). Skills decide how jobs rank; the rest fills the cover letter.

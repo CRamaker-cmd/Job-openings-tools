@@ -79,7 +79,7 @@ browser:
 
 web:
   host: 0.0.0.0   # reachable from your home network only - do NOT port-forward this
-  port: 8787      # any free port; Pi-hole uses 80/443 (and sometimes 8080), so avoid those
+  port: 8585      # any free port; Pi-hole uses 80/443 (and sometimes 8080), so avoid those
 
 # tier 1 = pays 90k+ (or close) in NL, tier 2 = decent but check the range.
 # NOTE: slugs/IDs below are from public knowledge and could not be tested from the dev sandbox.
