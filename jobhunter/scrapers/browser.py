@@ -113,9 +113,16 @@ class Browser(Scraper):
         with sync_playwright() as p:
             browser = p.chromium.launch(
                 headless=True, executable_path=self.bc.get("executable"),
-                args=["--no-sandbox", "--disable-dev-shm-usage"],  # /dev/shm is tiny on a Pi
+                args=["--no-sandbox", "--disable-dev-shm-usage",      # /dev/shm is tiny on a Pi
+                      "--disable-gpu", "--disable-extensions", "--mute-audio", "--no-first-run",
+                      "--disable-background-networking", "--disable-sync", "--disable-translate",
+                      "--renderer-process-limit=1",                     # one renderer: less RAM
+                      "--js-flags=--max-old-space-size=192"],
             )
-            ctx = browser.new_context(locale="en-GB", viewport={"width": 1366, "height": 900})
+            ctx = browser.new_context(locale="en-GB", viewport={"width": 1280, "height": 800})
+            # We only read text: don't download images, video, audio or fonts (saves RAM, CPU and bandwidth)
+            ctx.route("**/*", lambda route: route.abort()
+                      if route.request.resource_type in ("image", "media", "font") else route.continue_())
             page, self._detail = ctx.new_page(), ctx.new_page()
             try:
                 for url in e.get("urls") or [e["url"]]:

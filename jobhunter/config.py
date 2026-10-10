@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import os
 from pathlib import Path
 from typing import Any
 
@@ -36,6 +37,7 @@ DEFAULTS: dict[str, Any] = {
         "big_company_tiers": [1],
         "big_company_min_salary": 70000,
         "max_age_days": 60,
+        "repost_gap_days": 30,   # same role posted this many days apart = a new batch, not a duplicate
         "title_include": [
             r"software", r"developer", r"engineer", r"ontwikkelaar", r"programmeur",
             r"\bsde\b", r"\bswe\b", r"full.?stack", r"back.?end", r"front.?end",
@@ -86,7 +88,15 @@ DEFAULTS: dict[str, Any] = {
         "delay_seconds": 3.0,
         "benchmarks": {},             # extra/overriding {Company: {medior: [lo, hi]}} - see salary_benchmarks.yaml
     },
-    "schedule": {"enabled": True, "every_hours": 6},
+    "schedule": {
+        "enabled": True,
+        "every_hours": 24,               # every source is refreshed once per this many hours
+        "spread": True,                  # one source at a time, evenly spread over those hours
+        # Gentle mode: made for a Pi that also runs other things. A scrape just takes longer.
+        "low_priority": True,             # lowest CPU priority for scraping (the dashboard stays responsive)
+        "pause_between_sources": 15,      # seconds of rest between two companies
+        "pause_between_requests": 0.5,    # seconds between detail-page requests
+    },
     "browser": {
         "executable": None,           # path to chromium; None = Playwright's own download
         "delay_seconds": 2.0,
@@ -119,11 +129,20 @@ def _merge(base: dict, over: dict) -> dict:
 
 def load_base(path: str | Path | None = None) -> dict[str, Any]:
     """Defaults + config.yaml, WITHOUT the settings edited on the dashboard."""
-    path = Path(path) if path else ROOT / "config.yaml"
+    if path:
+        path = Path(path)
+    else:  # no config.yaml (e.g. a fresh Docker container): fall back to the shipped example, which has the company list
+        path = ROOT / "config.yaml"
+        if not path.exists() and (ROOT / "config.example.yaml").exists():
+            path = ROOT / "config.example.yaml"
     user: dict = {}
     if path.exists():
         user = yaml.safe_load(path.read_text()) or {}
     cfg = _merge(DEFAULTS, user)
+    # Docker/containers: point at the system Chromium without editing any file
+    exe = os.environ.get("JOBHUNTER_CHROMIUM")
+    if exe and not cfg["browser"].get("executable"):
+        cfg["browser"]["executable"] = exe
     db = Path(cfg["db_path"])
     if not db.is_absolute():
         cfg["db_path"] = str(ROOT / db)

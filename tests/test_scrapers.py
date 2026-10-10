@@ -17,6 +17,24 @@ def test_greenhouse():
     assert j.posted_at.year == 2026
 
 
+def test_greenhouse_is_two_step_and_light():
+    s = Greenhouse(cfg, {"name": "Adyen", "board": "adyen"})
+    calls = []
+
+    def fake_get(url, **kw):
+        calls.append((url, kw.get("params")))
+        if url.endswith("/jobs"):  # the list: tiny, no descriptions
+            return {"jobs": [{"id": 7, "title": "Backend Engineer", "absolute_url": "u", "location": {"name": "Amsterdam"}}]}
+        return {"content": html.escape("<p>Python</p>"),
+                "pay_input_ranges": [{"currency_type": "EUR", "min_cents": 9000000, "max_cents": 11000000}]}
+
+    s.get_json = fake_get
+    [job] = list(s.fetch())
+    assert job.description == "" and calls == [("https://boards-api.greenhouse.io/v1/boards/adyen/jobs", None)]  # no content=true
+    s.enrich(job)
+    assert job.description == "Python" and (job.salary_min, job.salary_max) == (90000, 110000)
+
+
 def test_lever_with_salary():
     s = Lever(cfg, {"name": "Palantir", "site": "palantir"})
     j = s.parse({"id": "abc", "text": "Software Engineer", "hostedUrl": "https://jobs.lever.co/palantir/abc",

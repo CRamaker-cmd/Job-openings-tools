@@ -20,7 +20,7 @@ def cmd_scrape(args, cfg):
             failed += 1
             print(f"  FAIL  {name}: {r}")
         else:
-            print(f"  ok    {name}: {r.seen} listed, {r.kept} relevant, {r.new} new")
+            print(f"  ok    {name}: {r.seen} listed, {r.known} already known, {r.new} new")
     print(f"{len(results) - failed}/{len(results)} sources ok")
 
 
@@ -43,7 +43,7 @@ def cmd_serve(args, cfg):
     host, port = cfg["web"]["host"], cfg["web"]["port"]
     print(f"Serving on http://{host}:{port}")
     try:
-        serve(create_app(cfg, scheduler_enabled=True), host=host, port=port)
+        serve(create_app(cfg, scheduler_enabled=True), host=host, port=port, threads=2)  # light on RAM
     except OSError as e:
         sys.exit(f"Cannot listen on port {port} ({e.strerror}). Is something else (e.g. Pi-hole) using it? "
                  f"Set a free port in config.yaml under web: port:")

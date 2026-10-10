@@ -13,8 +13,8 @@ The dashboard also has a built-in **Help** page covering the same ground in shor
    - **Settings → Profile**: name, email, phone, LinkedIn, a 2-3 sentence pitch and your **skills with weights**
      (1 = nice to have, 2 = solid, 3 = core stack). Skills decide how jobs rank; the rest fills the cover letter.
    - **Companies**: the employers searched directly. Defaults are included; add or remove any (section 5).
-   - **Scrape now**: the first scrape takes a few minutes. After that it repeats on its own
-     (default every 6 hours; **Settings → Schedule**).
+   - **Scrape now**: optional, refreshes every company straight away. Otherwise the app already works through the
+     companies on its own, one at a time, so jobs appear gradually over the first 10-20 minutes (**Settings → Schedule**).
    - **Status**: shows which sources worked. Failed ones usually need a small fix (see [Troubleshooting](TROUBLESHOOTING.md)).
 
 ## 2. The Jobs page (dashboard)
@@ -67,7 +67,9 @@ auto-submitting could send the wrong thing in your name. It makes applying quick
 3. Press **✓ I applied**. The job moves to the *Applied* tab with the date. Use *Interview* / *Rejected* as things progress,
    and the **Notes** box for contacts and dates.
 
-*Hide* removes a job you don't want; it stays in the Hidden tab. **CSV** (top right) exports the list.
+**Hide** (✕) dismisses a job for good: it stays in the Hidden tab and is never looked at again. **Delete** (🗑, on a job's page
+or in the Hidden tab) forgets a job completely: if it is still listed on the company's site, the next refresh picks it up again as
+a new job and re-checks it. **CSV** (top right) exports the list.
 
 ## 4. Settings
 
@@ -123,3 +125,27 @@ career sites for searching manually.
   throttled, and never uses your account. It can still break or get your IP blocked for a while; turn it off in
   *Settings → LinkedIn search* if you prefer not to risk it.
 - Company feeds change without notice. A failed source never stops the others.
+
+## 8. How it stays light, and what counts as "new"
+
+The app is meant to run quietly on a shared Raspberry Pi:
+
+- **Once per cycle, one company at a time.** Every company is refreshed once every *N* hours (default 24, *Settings →
+  Schedule*), evenly spread: with 22 companies that is about one an hour. A brand-new install or a newly added company is
+  scraped right away, one after the other. It runs at the lowest CPU priority with pauses between requests, so it simply
+  takes longer rather than using much.
+- **Only new postings cost anything.** A posting that is already saved is only marked "still listed" (this is also how closed
+  postings disappear). Nothing is fetched or re-scored for it. A posting that was looked at and rejected (too senior, asks
+  too many years, pays too little, ...) is remembered for 30 days so it isn't fetched again either.
+- **How "already saved" is decided.** Same company site + same posting ID = same opening. The same title posted again
+  *with a new ID* is a **new opening** (companies re-open roles for a new batch). With the same ID or no ID, the **posting
+  date** decides: a posting more than *N* days after the saved one (*Settings → Matching → "Treat a re-posted role as new
+  after"*, default 30) is a new batch; close dates mean the same opening. The same role found on LinkedIn and on the company
+  site is one job (matched on title/company/city + date). Dates a source can't vouch for (e.g. a "last edited" stamp) are
+  never used to call something a re-post.
+- **Changing a rule re-scores what you already have** (locally, no network): saving *Matching*, *Profile*, *Pay lookups* or
+  *Advanced* settings re-applies them to saved jobs (those that no longer fit are moved to *Hidden*, never starred/applied
+  ones) and gives previously rejected postings a fresh look at the next refresh.
+- **To re-check one job yourself**, delete it (🗑): it returns as a new job if it is still listed.
+
+Running it in Docker adds resource limits so the Pi's other services always win; see [DOCKER.md](DOCKER.md).

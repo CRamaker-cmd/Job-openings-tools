@@ -13,14 +13,18 @@ from .base import Scraper, html_to_text, parse_dt
 
 # ------------------------------------------------------------------ Greenhouse
 class Greenhouse(Scraper):
-    """https://boards-api.greenhouse.io/v1/boards/<board>/jobs?content=true"""
+    """https://boards-api.greenhouse.io/v1/boards/<board>/jobs
+
+    The list is small (no descriptions); the full text is fetched per job only for postings that pass
+    the title/location prefilter. Much lighter than ``?content=true``, which ships every description of
+    every job (many MB for big boards) just to throw most of them away.
+    """
+
+    def _api(self) -> str:
+        return f"https://boards-api.greenhouse.io/v1/boards/{self.entry['board']}/jobs"
 
     def fetch(self) -> Iterator[RawJob]:
-        board = self.entry["board"]
-        data = self.get_json(
-            f"https://boards-api.greenhouse.io/v1/boards/{board}/jobs", params={"content": "true"}
-        )
-        for j in data.get("jobs", []):
+        for j in self.get_json(self._api()).get("jobs", []):
             yield self.parse(j)
 
     def parse(self, j: dict) -> RawJob:
@@ -29,9 +33,18 @@ class Greenhouse(Scraper):
             title=j.get("title", ""), url=j.get("absolute_url", ""),
             location=(j.get("location") or {}).get("name", ""),
             external_id=str(j.get("id", "")),
-            description=html_to_text(j.get("content", "")),
+            description=html_to_text(j.get("content", "")),  # only present if the API included it
             posted_at=parse_dt(j.get("first_published") or j.get("updated_at")),
+            # "updated_at" changes whenever the company edits the text, so it can't tell us about re-posts
+            extra={} if j.get("first_published") else {"date_unreliable": True},
         )
+
+    def enrich(self, job: RawJob) -> None:
+        d = self.get_json(f"{self._api()}/{job.external_id}", params={"pay_transparency": "true"})
+        job.description = html_to_text(d.get("content", ""))
+        for r in d.get("pay_input_ranges") or []:  # present when the company publishes pay ranges
+            if str(r.get("currency_type", "")).upper() == "EUR" and r.get("max_cents"):
+                job.salary_min, job.salary_max = int(r.get("min_cents", 0)) // 100 or None, int(r["max_cents"]) // 100
 
 
 # ------------------------------------------------------------------ Lever

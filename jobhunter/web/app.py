@@ -16,8 +16,8 @@ from .. import companies as co
 from .. import scheduler, settings
 from ..config import load_base
 from ..db import DB, STATUSES
-from ..runner import run_all
-from ..scrapers import REGISTRY
+from ..runner import rescore, run_all, run_one
+from ..scrapers import REGISTRY, source_names
 from ..scrapers.browser import playwright_available
 
 log = logging.getLogger(__name__)
@@ -46,29 +46,37 @@ def create_app(cfg: dict, scheduler_enabled: bool = False) -> Flask:
     app.secret_key = os.urandom(16)  # only signs the one-request "saved!" messages
     db = DB(cfg["db_path"])
     lock = threading.Lock()
-    state = {"running": False}
+    state = {"running": False, "what": ""}
 
     # ------------------------------------------------------------ scraping control
-    def start_scrape() -> bool:
-        """Start a scrape in the background. False if one is already running."""
+    def start_job(work, label: str) -> bool:
+        """Run `work(db)` in the background, one job at a time. False if something is already running."""
         if not lock.acquire(blocking=False):
             return False
-        state["running"] = True
+        state["running"], state["what"] = True, label
 
-        def work():
+        def run():
             try:
-                run_all(cfg, DB(cfg["db_path"]))
+                work(DB(cfg["db_path"]))
             except Exception:
                 log.exception("scrape failed")
             finally:
-                state["running"] = False
+                state["running"], state["what"] = False, ""
                 lock.release()
 
-        threading.Thread(target=work, name="scrape", daemon=True).start()
+        threading.Thread(target=run, name="scrape", daemon=True).start()
         return True
 
+    def start_scrape() -> bool:
+        """Everything now, one source after another ('Scrape now')."""
+        return start_job(lambda d: run_all(cfg, d), "all sources")
+
+    def start_one(name: str) -> bool:
+        """A single source (used by the background scheduler)."""
+        return start_job(lambda d: run_one(cfg, d, name), name)
+
     if scheduler_enabled:
-        scheduler.start(cfg, db.last_run_started, start_scrape)
+        scheduler.start(cfg, lambda: source_names(cfg), db.last_run_by_origin, start_one)
 
     # ------------------------------------------------------------ template helpers
     @app.template_filter("fromjson")
@@ -100,7 +108,7 @@ def create_app(cfg: dict, scheduler_enabled: bool = False) -> Flask:
 
     @app.context_processor
     def inject():
-        return {"running": state["running"], "min_salary": cfg["search"]["min_salary"]}
+        return {"running": state["running"], "running_what": state["what"], "min_salary": cfg["search"]["min_salary"]}
 
     def setup_steps():
         p = cfg["profile"]
@@ -150,6 +158,13 @@ def create_app(cfg: dict, scheduler_enabled: bool = False) -> Flask:
         db.set_status(job_id, status)
         return jsonify(ok=True, status=status)
 
+    @app.post("/api/job/<int:job_id>/delete")
+    def api_delete(job_id):
+        if db.get(job_id) is None:
+            abort(404)
+        db.delete_job(job_id)
+        return jsonify(ok=True)
+
     @app.post("/api/job/<int:job_id>/notes")
     def api_notes(job_id):
         if db.get(job_id) is None:
@@ -194,6 +209,16 @@ def create_app(cfg: dict, scheduler_enabled: bool = False) -> Flask:
     def base_cfg():
         return load_base(cfg["_config_path"])
 
+    def apply_rule_change(section: str) -> str:
+        """Jobs we already have are never re-fetched, so after the rules change we re-score them locally
+        (no network). Dropped postings get another look at the next scrape."""
+        if section in ("matching", "pay", "advanced", "profile"):
+            db.clear_rejected()
+            done, moved = rescore(cfg, db)
+            msg = f"Re-scored {done} job{'s' if done != 1 else ''} with the new rules"
+            return msg + (f"; {moved} no longer fit and moved to Hidden." if moved else ".")
+        return "Applies from the next scrape."
+
     @app.get("/settings")
     def settings_index():
         return redirect(url_for("settings_page", section="profile"))
@@ -212,7 +237,7 @@ def create_app(cfg: dict, scheduler_enabled: bool = False) -> Flask:
                 form_values = {f.path: request.form.get(f.path, "") for f in sec.fields}
             else:
                 settings.save_values(db, cfg, base_cfg(), values)
-                flash("Saved. Changes apply immediately (to the next scrape for scraping settings).", "ok")
+                flash("Saved. " + apply_rule_change(section), "ok")
                 return redirect(url_for("settings_page", section=section))
         base = base_cfg()
         rows = []
@@ -240,6 +265,7 @@ def create_app(cfg: dict, scheduler_enabled: bool = False) -> Flask:
     # ------------------------------------------------------------ companies
     def save_companies(items: list) -> None:
         settings.save_values(db, cfg, base_cfg(), {"companies": items})
+        rescore(cfg, db)  # tiers can change pay assumptions of jobs already saved
 
     @app.get("/companies")
     def companies_page():

@@ -10,6 +10,8 @@
   <a class="btn primary" href="{{ job.url }}" target="_blank" rel="noopener">Open application page ↗</a>
   {% for s in ['starred','applied','interview','rejected','hidden','new'] %}{% if s!=job.status %}<button onclick="setStatus({{ job.id }},'{{ s }}')">{{ {'new':'Reset to new','starred':'★ Star','applied':'✓ I applied','interview':'Interview','rejected':'Rejected','hidden':'Hide'}[s] }}</button>{% endif %}{% endfor %}
  </div>
+ <p class="meta"><b>Hide</b> = dismiss it for good (it stays in the Hidden tab and is never re-checked). <b>Delete</b> = forget it completely: if it's still listed on the company's site, the next scrape picks it up again as a new job and re-checks it.
+  <button class="linkish" onclick="if(confirm('Delete this job? It comes back as a new job if it is still listed.'))post('/api/job/{{ job.id }}/delete',{}).then(()=>location='{{ url_for('index') }}')">🗑 Delete</button></p>
  <p class="meta">Applying: open the page, paste the cover letter below, use <a href="{{ url_for('profile') }}">My snippets</a> for form fields, then press “I applied”.</p>
 </div>
 <div class="card"><h3 style="margin-top:0">Why this score: {{ job.score }}/100</h3>

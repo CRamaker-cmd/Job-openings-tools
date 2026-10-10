@@ -11,9 +11,15 @@ Everything runs on this machine and costs nothing.</p>
  <li><b><a href="{{ url_for('settings_page', section='profile') }}">Settings → Profile</a></b>: add your name, email, pitch and skills. Skills decide how jobs score; the rest fills the cover letter.</li>
  <li><b><a href="{{ url_for('companies_page') }}">Companies</a></b>: employers searched directly. Add or remove any; <b>Test</b> checks it works.</li>
  <li><b><a href="{{ url_for('index') }}">Jobs</a></b> (the dashboard): press <b>Scrape now</b>, then work down the list, best match first. It also scrapes by itself on a schedule
-     ({% if cfg.schedule.enabled %}every {{ cfg.schedule.every_hours }} hours{% else %}currently off{% endif %}; <a href="{{ url_for('settings_page', section='schedule') }}">change it</a>).</li>
+     ({% if cfg.schedule.enabled %}every company once every {{ cfg.schedule.every_hours }} hours, one at a time in the background, at low CPU priority{% else %}currently off{% endif %}; <a href="{{ url_for('settings_page', section='schedule') }}">change it</a>).</li>
  <li>Open a job's <b>Details</b>, copy the cover letter, press <b>Open application page</b>, apply, then press <b>I applied</b> so it moves to the Applied tab.</li>
 </ol>
+
+<h3>Quiet in the background</h3>
+<p>Built to share a small computer with other things: every company is refreshed once every {{ cfg.schedule.every_hours }} hours, one at a time, at low priority.
+<b>Only new job postings are processed</b>: a posting that's already in your list (or was already rejected) is skipped. A role a company <i>re-opens</i> for a new batch counts as new
+(new ID, or posted more than {{ cfg.search.repost_gap_days }} days after the saved one). To make the app look at a job again, open it (or the Hidden tab) and press <b>🗑 Delete</b>.
+<b>Hide</b> (✕) dismisses a job for good. When you change rules in Settings, jobs you already have are re-scored right away.</p>
 
 <h3>The score (0–100)</h3>
 <p>Points for: a junior or medior title (+15), skills from your profile found in the posting (up to +25, more for skills in the title),

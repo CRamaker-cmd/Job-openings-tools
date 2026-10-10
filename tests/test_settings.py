@@ -6,7 +6,7 @@ from werkzeug.datastructures import MultiDict
 from jobhunter import settings
 from jobhunter.config import load_base, load_config
 from jobhunter.db import DB
-from jobhunter.scheduler import is_due
+from jobhunter.scheduler import pick_next
 from jobhunter.web.app import create_app
 
 
@@ -37,7 +37,7 @@ def test_parse_and_validation():
 def test_settings_persist_apply_live_and_reset(env):
     tmp, cfg, c = env
     form = {"search.min_salary": "85000", "search.big_company_min_salary": "65000", "search.max_years_required": "3",
-            "search.max_age_days": "30", "search.country_keywords": "netherlands\namsterdam",
+            "search.max_age_days": "30", "search.repost_gap_days": "30", "search.country_keywords": "netherlands\namsterdam",
             "search.big_company_tiers": "1"}
     r = c.post("/settings/matching", data=form, follow_redirects=True)
     assert b"Saved" in r.data
@@ -54,7 +54,7 @@ def test_settings_persist_apply_live_and_reset(env):
     assert load_config(tmp / "config.yaml")["search"]["min_salary"] == 90000
     # values equal to the base default are not stored at all
     c.post("/settings/matching", data={**form, "search.min_salary": "90000", "search.big_company_min_salary": "70000",
-                                       "search.max_years_required": "4", "search.max_age_days": "60",
+                                       "search.max_years_required": "4", "search.max_age_days": "60", "search.repost_gap_days": "30",
                                        "search.country_keywords": "\n".join(load_base(tmp / "config.yaml")["search"]["country_keywords"])})
     assert settings.read_overrides(cfg["db_path"]).get("search.min_salary") is None
 
@@ -110,17 +110,74 @@ def test_company_test_button_reports_errors(env):
     assert r.status_code == 200 and r.get_json()["ok"] is False
 
 
-def test_scheduler_is_due():
+def test_scheduler_trickles_one_source_at_a_time():
     now = datetime(2026, 10, 10, 12, 0, tzinfo=timezone.utc)
-    iso = lambda h: (now - timedelta(hours=h)).isoformat()
-    assert is_due(now, None, 6, True)             # never ran
-    assert not is_due(now, iso(2), 6, True)       # ran recently
-    assert is_due(now, iso(7), 6, True)           # overdue
-    assert not is_due(now, iso(99), 6, False)     # switched off
-    assert is_due(now, iso(2), 1, True)           # shorter interval takes effect
+    ago = lambda **kw: (now - timedelta(**kw)).isoformat()
+    names = ["A", "B", "C", "D"]  # 24h cycle / 4 sources = one every 6h in steady state
+
+    # fresh install: nothing ever ran -> go right away, then continue back-to-back after the short pause
+    assert pick_next(now, names, {}, 24, 15) == "A"
+    assert pick_next(now, names, {"A": (ago(seconds=5), True)}, 24, 15) is None           # too soon after A
+    assert pick_next(now, names, {"A": (ago(seconds=20), True)}, 24, 15) == "B"           # never-run sources don't wait for a slot
+
+    # steady state: everything ran within 24h; only the overdue one is picked, and not before its 6h slot
+    last = {"A": (ago(hours=25), True), "B": (ago(hours=19), True), "C": (ago(hours=13), True), "D": (ago(hours=7), True)}
+    assert pick_next(now, names, last, 24, 15) == "A"                                     # A is 25h old; last scrape 7h ago > 6h slot
+    last_recent = {**last, "D": (ago(hours=2), True)}
+    assert pick_next(now, names, last_recent, 24, 15) is None                             # last scrape only 2h ago < 6h slot
+    last_ok = {**last, "D": (ago(hours=6, minutes=1), True)}
+    assert pick_next(now, names, last_ok, 24, 15) == "A"                                  # most overdue first
+    assert pick_next(now, names, {n: (ago(hours=3), True) for n in names}, 24, 15) is None  # nothing due
+
+    # spread off: due sources run one after another with just the short pause
+    assert pick_next(now, names, {**last, "D": (ago(minutes=5), True)}, 24, 15, spread=False) == "A"
+
+    # a failed source is retried after 6h, not after a whole cycle
+    assert pick_next(now, ["A"], {"A": (ago(hours=7), False)}, 24, 15) == "A"
+    assert pick_next(now, ["A"], {"A": (ago(hours=7), True)}, 24, 15) is None
+    assert pick_next(now, [], {}, 24, 15) is None
 
 
 def test_settings_doc_is_up_to_date():
     import subprocess, sys
     r = subprocess.run([sys.executable, "tools/gen_settings_doc.py", "--check"])
     assert r.returncode == 0, "docs/SETTINGS.md is stale: run  python tools/gen_settings_doc.py"
+
+
+def test_no_config_yaml_falls_back_to_example_and_env_chromium(tmp_path, monkeypatch):
+    import shutil
+    from jobhunter import config
+    shutil.copy("config.example.yaml", tmp_path / "config.example.yaml")  # a fresh container has only the example
+    monkeypatch.setattr(config, "ROOT", tmp_path)
+    monkeypatch.setenv("JOBHUNTER_CHROMIUM", "/usr/bin/chromium")
+    cfg = config.load_config()
+    assert any(c["name"] == "Adyen" for c in cfg["companies"])      # default companies are present
+    assert cfg["browser"]["executable"] == "/usr/bin/chromium"
+    assert cfg["db_path"] == str(tmp_path / "data" / "jobs.db")
+
+
+def test_runner_paces_itself_and_lowers_priority(monkeypatch, tmp_path):
+    from jobhunter import runner
+    from jobhunter.models import RawJob
+    from jobhunter.scrapers.base import Scraper
+
+    cfg = load_config("config.example.yaml")
+    cfg["db_path"] = str(tmp_path / "p.db")
+    assert cfg["schedule"]["low_priority"] and cfg["schedule"]["pause_between_sources"] > 0
+    sleeps = []
+    monkeypatch.setattr(runner.time, "sleep", lambda s: sleeps.append(s))
+    prio = []
+    monkeypatch.setattr(runner, "lower_priority", lambda: prio.append(1))
+
+    class NoDesc(Scraper):  # a listing without description -> one detail request per kept job
+        def fetch(self):
+            yield RawJob(source="x", origin=self.name, company="Adyen", title=f"Software Engineer {self.name}",
+                         url="u", location="Amsterdam", external_id=self.name)
+        def enrich(self, job):
+            job.description = "Python"
+
+    monkeypatch.setattr(runner, "build_scrapers", lambda cfg, only=None: [NoDesc(cfg, {"name": "A"}), NoDesc(cfg, {"name": "B"})])
+    runner.run_all(cfg, DB(cfg["db_path"]))
+    assert prio == [1]                                              # low priority applied once
+    assert sleeps.count(cfg["schedule"]["pause_between_sources"]) == 1   # rests between the 2 sources, not before the first
+    assert sleeps.count(cfg["schedule"]["pause_between_requests"]) == 2  # one pause per detail request

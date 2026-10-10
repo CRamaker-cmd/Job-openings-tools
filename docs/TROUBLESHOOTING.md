@@ -41,13 +41,19 @@ regular expressions, one per line.
 `sudo systemctl restart jobhunter-web`.
 
 ## I changed a setting but nothing happened
-Settings apply immediately, but scraping settings (LinkedIn terms, pay lookups) take effect on the **next scrape**. Jobs already
-collected keep their old score until the next scrape sees them again. Only `web.host`, `web.port` and `db_path` (in `config.yaml`)
+Settings apply immediately. Rule changes (Matching, Profile, Pay lookups, Advanced) also **re-score the jobs you already have**
+(shown in the "Saved" message). Scraping settings (LinkedIn terms) apply to the next refresh. Only `web.host`, `web.port` and `db_path` (in `config.yaml`)
 need a restart.
+
+## A job I expected didn't show up again / a job was posted again but isn't new
+Only postings we haven't seen are processed. A re-opened role counts as new when it has a **new ID** or is posted more than
+*N* days after the saved one (*Settings → Matching*, default 30). If a company re-posts under the same ID and the same date,
+the app can't tell, so delete the old job (🗑) to make it re-check. Rejected postings are remembered for 30 days; changing a
+matching rule clears that memory.
 
 ## Starting over
 Stop the app and delete `data/jobs.db` (this erases jobs, notes **and** dashboard settings). To only undo settings use the *Reset*
 buttons.
 
 ## Logs
-`journalctl -u jobhunter-web -f` (systemd) or the terminal if started by hand with `python -m jobhunter -v serve`.
+`docker compose logs -f` (Docker), `journalctl -u jobhunter-web -f` (systemd) or the terminal if started by hand with `python -m jobhunter -v serve`.

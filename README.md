@@ -9,20 +9,27 @@ and keep track.
 
 ![dashboard](docs/dashboard.png)
 
-## Quick start (Raspberry Pi)
+## Quick start (Raspberry Pi, with Docker: recommended)
 
 ```bash
 git clone https://github.com/CRamaker-cmd/Job-openings-tools && cd Job-openings-tools
-./deploy/install.sh        # creates a venv, installs a systemd service for the web app
+docker compose up -d --build
 ```
 Open `http://<pi-hostname>.local:8787`, then follow the **Getting started** checklist on the Jobs page:
-fill in your profile → check the companies list → press **Scrape now**. After that it scrapes by itself
-(every 6 hours by default) and you only open the dashboard.
+fill in your profile → check the companies list → press **Scrape now**. After that it keeps itself fresh in the background.
+Everything lives in one removable container (`docker compose down -v --rmi local` deletes it all). Details, backup, updates and
+Docker installation: [docs/DOCKER.md](docs/DOCKER.md). Without Docker: `./deploy/install.sh` (systemd) or run it by hand
+(`python -m venv .venv && .venv/bin/pip install -r requirements.txt && .venv/bin/python -m jobhunter serve`).
 
 > The dashboard has no login: keep it on your home network and **never port-forward it**.
-> Port 8787 was chosen to stay clear of Pi-hole; change `web: port:` in `config.yaml` if needed.
+> Port 8787 was chosen to stay clear of Pi-hole; change it in `compose.yaml` (Docker) or `config.yaml`.
 
-Manual run without systemd: `python -m venv .venv && .venv/bin/pip install -r requirements.txt && .venv/bin/python -m jobhunter serve`.
+### Quiet by design (it shares your Pi with a media server and Pi-hole)
+
+Each company is refreshed **once a day**, **one at a time** (about one an hour), at the **lowest CPU priority**, and only
+**new** job postings are processed: anything already saved is skipped, and a role that a company re-opens for a new batch
+is recognised as new. In the container it is capped (1 core, 1 GB, `oom_score_adj` so it is stopped first if memory runs out)
+and idles at roughly **34 MB RAM / 0.02 % CPU**. See [docs/DOCKER.md](docs/DOCKER.md#made-for-a-shared-pi).
 
 ## What you can do in the dashboard
 
@@ -65,6 +72,7 @@ Twilio, Okta, Adobe, Salesforce, NVIDIA, Google, Meta, Apple, Microsoft. Add any
 |---|---|
 | [docs/USER_GUIDE.md](docs/USER_GUIDE.md) | Walkthrough of every page, scoring and pay labels, applying, companies, privacy |
 | [docs/SETTINGS.md](docs/SETTINGS.md) | Every setting, its default and effect (generated from the code) |
+| [docs/DOCKER.md](docs/DOCKER.md) | Running in Docker, backups, updates, resource use on a shared Pi |
 | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Failed sources, LinkedIn blocks, pay oddities, port conflicts |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Modules, data flow, design decisions, how to extend (for developers) |
 

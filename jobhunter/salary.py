@@ -61,8 +61,8 @@ def aggregate(found: list[tuple[int, int]]) -> Optional[tuple[int, int, int]]:
 
 
 class Estimator:
-    def __init__(self, cfg: dict, db=None):
-        self.cfg, self.db = cfg, db
+    def __init__(self, cfg: dict, db=None, allow_web: bool = True):
+        self.cfg, self.db, self.allow_web = cfg, db, allow_web  # allow_web=False: tables + cache only, no network
         self.sc = cfg["salary"]
         self.http = make_session()
         self.lookups = 0
@@ -84,7 +84,7 @@ class Estimator:
         if cached is not None:
             lo, hi, n = cached
             return PayEstimate(lo, hi, "online", f"{n} web results") if lo else None
-        if self.blocked or self.lookups >= self.sc["max_lookups_per_run"]:
+        if not self.allow_web or self.blocked or self.lookups >= self.sc["max_lookups_per_run"]:
             return None
         return self._lookup(company, level, key)
 

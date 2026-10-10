@@ -12,13 +12,13 @@
  <div><b>{{ counts.starred }}</b><span>starred</span></div>
  <div><b>{{ summary.applied }}</b><span>applied / interviewing</span></div>
  <div class="grow"><span>Last scrape: {{ summary.last_run[:16]|replace('T',' ') + ' UTC' if summary.last_run else 'never' }}</span>
-  {% if running %}⏳ scraping…{% else %}<form method="post" action="{{ url_for('scrape_now') }}"><button title="Look for new jobs right now (takes a few minutes)">Scrape now</button></form>{% endif %}</div>
+  {% if running %}⏳ scraping…{% else %}<form method="post" action="{{ url_for('scrape_now') }}"><button title="Refresh every company right now, one after another (slow on purpose, runs at low priority)">Scrape now</button></form>{% endif %}</div>
 </div>
 <details class="legend"><summary>ℹ️ How to read this list</summary>
  <div class="cols">
   <div><b>Score (0–100)</b><br>How well a job fits you: junior/medior wording, your skills, pay, company and how fresh it is.
    <span class="tag">75+ strong</span> <span class="tag">60+ decent</span><br>
-   <b>Buttons</b><br><b>Apply ↗</b> opens the company's own page · <b>Details</b> = description, cover letter, notes · ★ keep for later · ✕ hide it.</div>
+   <b>Buttons</b><br><b>Apply ↗</b> opens the company's own page · <b>Details</b> = description, cover letter, notes · ★ keep for later · ✕ hide it (🗑 delete, in Hidden/Details, makes the app re-check a job).</div>
   <div><b>Pay label</b> (most postings don't state a salary, so we estimate):<br>
    <span class="tag pay">€95k–120k</span> stated in the posting<br>
    <span class="tag pay">≈ €105k–125k typical</span> reported pay for this company &amp; level<br>
@@ -56,8 +56,13 @@
  <div class="actions">
   <a class="btn primary" href="{{ j.url }}" target="_blank" rel="noopener" title="Opens the company's application page in a new tab" onclick="setTimeout(()=>{if(confirm('Mark as applied?'))setStatus({{ j.id }},'applied')},800)">Apply ↗</a>
   <a class="btn" href="{{ url_for('job_page', job_id=j.id) }}">Details</a>
+  {% if j.status == 'hidden' %}
+  <button onclick="setStatus({{ j.id }},'new')" title="Move it back to Open">↩ Restore</button>
+  <button onclick="if(confirm('Delete? It comes back as a new job (and is re-checked) if it is still listed.'))post('/api/job/{{ j.id }}/delete',{}).then(()=>document.getElementById('job-{{ j.id }}').remove())" title="Forget it completely; the next scrape re-checks it if still listed">🗑</button>
+  {% else %}
   <button onclick="setStatus({{ j.id }},'starred')" title="Star: keep for later">★</button>
-  <button onclick="setStatus({{ j.id }},'hidden')" title="Hide this job">✕</button>
+  <button onclick="setStatus({{ j.id }},'hidden')" title="Hide: dismiss, never shown or re-checked again">✕</button>
+  {% endif %}
  </div>
 </div>
 {% else %}
@@ -66,7 +71,7 @@
  {% elif summary.last_run %}No open jobs match right now.{% if hidden_by_pay %} {{ hidden_by_pay }} more are hidden because their pay is unknown or too low - set <b>Pay → Everything</b> to see them.{% endif %}
  {% else %}<b>No jobs yet.</b> The first scrape hasn't run.{% if running %} It's running now - refresh in a minute or two.{% else %}
   <form method="post" action="{{ url_for('scrape_now') }}" style="margin-top:12px"><button class="primary">Scrape now</button></form>
-  <p class="meta">It takes a few minutes. After that it repeats automatically (see <a href="{{ url_for('settings_page', section='schedule') }}">Settings → Schedule</a>).</p>{% endif %}
+  <p class="meta">It works through the companies one at a time, gently, so jobs appear gradually over the first 10-20 minutes. After that every company is refreshed automatically (see <a href="{{ url_for('settings_page', section='schedule') }}">Settings → Schedule</a>).</p>{% endif %}
  {% endif %}</div>
 {% endfor %}
 {% if jobs and hidden_by_pay and f.pay=='good' %}<p class="meta" style="text-align:center">{{ hidden_by_pay }} more job{{ 's' if hidden_by_pay!=1 }} hidden (pay unknown or too low). <a href="{{ url_for('index', status=f.status, pay='all') }}">Show everything</a></p>{% endif %}

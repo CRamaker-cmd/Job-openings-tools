@@ -88,6 +88,10 @@ SECTIONS: list[Section] = [
                       help="Postings that ask for more years of experience than this are dropped. "
                            "Title words like 'Senior', 'Staff', 'Lead' are filtered separately (see Advanced)."),
                 Field("search.max_age_days", "Ignore postings older than", "int", min=1, max=365, unit="days"),
+                Field("search.repost_gap_days", "Treat a re-posted role as new after", "int", min=1, max=365, unit="days",
+                      help="Companies re-open the same role for a new batch. A posting with the same title and company that "
+                           "appears more than this many days after the one already saved counts as a NEW opening and is "
+                           "checked again. A new posting ID always counts as new. Older postings are never re-fetched."),
                 Field("search.include_remote", "Include remote jobs", "bool", group="Location",
                       help="Off = only jobs located in the Netherlands. On = also keep jobs whose location says 'Remote' "
                            "(from any country)."),
@@ -126,11 +130,22 @@ SECTIONS: list[Section] = [
                            "(yearly €, e.g.  Mollie | medior | 75000 | 95000 )."),
             ]),
     Section("schedule", "Schedule",
-            "How often the app looks for new jobs by itself. You can always press 'Scrape now' on the dashboard.",
+            "How the app keeps jobs fresh by itself, quietly in the background. You can always press 'Scrape now' to refresh everything immediately.",
             [
-                Field("schedule.enabled", "Scrape automatically", "bool"),
-                Field("schedule.every_hours", "Every", "int", min=1, max=168, unit="hours",
-                      help="Job boards rarely change faster than every few hours; 6-12 is plenty."),
+                Field("schedule.enabled", "Refresh jobs automatically", "bool"),
+                Field("schedule.every_hours", "Refresh every company once every", "int", min=1, max=168, unit="hours",
+                      help="A full refresh once a day (24) is plenty: job boards rarely change faster than that."),
+                Field("schedule.spread", "Spread the work evenly", "bool",
+                      help="On (recommended): one company at a time, spread over the whole period. With 22 companies "
+                           "and 24 hours that is one every ~65 minutes, so the machine is never busy for long. "
+                           "Off: everything is refreshed in one go when the period is up."),
+                Field("schedule.low_priority", "Run at lowest CPU priority", "bool", group="Go easy on the machine",
+                      help="Recommended when the machine also does other work (media server, Pi-hole, ...). "
+                           "Scraping then only uses CPU that nothing else wants. It just takes longer."),
+                Field("schedule.pause_between_sources", "Rest between companies", "int", min=0, max=600,
+                      unit="seconds", help="Spreads the work out so it never runs as one big burst."),
+                Field("schedule.pause_between_requests", "Pause between page requests", "float", min=0, max=10,
+                      unit="seconds"),
             ]),
     Section("advanced", "Advanced: title rules & browser",
             "Regular expressions (case-insensitive, one per line) that decide which job titles are considered. "

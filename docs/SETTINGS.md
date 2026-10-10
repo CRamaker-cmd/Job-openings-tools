@@ -32,6 +32,7 @@ What counts as a job worth showing. Jobs that fail these rules are not saved at 
 | Which company tiers count as 'big' | `search.big_company_tiers` | `[1]` | A company's tier is set on the Companies page. LinkedIn jobs from companies you haven't added there are never treated as big. |
 | Maximum years of experience asked | `search.max_years_required` | `4` | Postings that ask for more years of experience than this are dropped. Title words like 'Senior', 'Staff', 'Lead' are filtered separately (see Advanced). Unit: years. Allowed: 0-20. |
 | Ignore postings older than | `search.max_age_days` | `60` |  Unit: days. Allowed: 1-365. |
+| Treat a re-posted role as new after | `search.repost_gap_days` | `30` | Companies re-open the same role for a new batch. A posting with the same title and company that appears more than this many days after the one already saved counts as a NEW opening and is checked again. A new posting ID always counts as new. Older postings are never re-fetched. Unit: days. Allowed: 1-365. |
 | Include remote jobs | `search.include_remote` | `off` | Off = only jobs located in the Netherlands. On = also keep jobs whose location says 'Remote' (from any country). |
 | Words that mean 'in the Netherlands' | `search.country_keywords` | `netherlands, nederland, amsterdam, rotterdam, utrecht, ei...` | One per line. A job's location must contain one of these words. |
 
@@ -63,12 +64,16 @@ Most postings don't show a salary. For those, the app looks up what is typically
 
 ## Schedule
 
-How often the app looks for new jobs by itself. You can always press 'Scrape now' on the dashboard.
+How the app keeps jobs fresh by itself, quietly in the background. You can always press 'Scrape now' to refresh everything immediately.
 
 | Setting | Path | Default | What it does |
 |---|---|---|---|
-| Scrape automatically | `schedule.enabled` | `on` |  |
-| Every | `schedule.every_hours` | `6` | Job boards rarely change faster than every few hours; 6-12 is plenty. Unit: hours. Allowed: 1-168. |
+| Refresh jobs automatically | `schedule.enabled` | `on` |  |
+| Refresh every company once every | `schedule.every_hours` | `24` | A full refresh once a day (24) is plenty: job boards rarely change faster than that. Unit: hours. Allowed: 1-168. |
+| Spread the work evenly | `schedule.spread` | `on` | On (recommended): one company at a time, spread over the whole period. With 22 companies and 24 hours that is one every ~65 minutes, so the machine is never busy for long. Off: everything is refreshed in one go when the period is up. |
+| Run at lowest CPU priority | `schedule.low_priority` | `on` | Recommended when the machine also does other work (media server, Pi-hole, ...). Scraping then only uses CPU that nothing else wants. It just takes longer. |
+| Rest between companies | `schedule.pause_between_sources` | `15` | Spreads the work out so it never runs as one big burst. Unit: seconds. Allowed: 0-600. |
+| Pause between page requests | `schedule.pause_between_requests` | `0.5` |  Unit: seconds. Allowed: 0-10. |
 
 ## Advanced: title rules & browser
 

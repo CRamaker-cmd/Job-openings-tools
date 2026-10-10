@@ -18,13 +18,20 @@ No frontend build step; templates are server-rendered with a few lines of vanill
 | `filters.py` | Pure functions: `title_ok`, `location_ok`, `parse_salary`, `years_required`, `evaluate()` → `Evaluation` (reject reason, score, level, pay confidence, reasons). Everything about "is this job relevant / how good". |
 | `salary.py` | `Estimator`: reported-pay table (`salary_benchmarks.yaml`) → cached web-search lookup (DuckDuckGo result snippets, parsed for EUR figures) → `None`. |
 | `scrapers/` | `Scraper` base (`fetch()` yields `RawJob`, optional `enrich()`); `ats.py` (Greenhouse, Lever, Ashby, SmartRecruiters, Workday, Jibe), `custom.py` (Amazon, Uber), `linkedin.py` (public guest search), `browser.py` (Playwright, link-pattern based). `REGISTRY` in `__init__.py` maps the `ats:` name to a class. |
-| `runner.py` | Orchestrates one scrape: for each scraper → prefilter → enrich → evaluate → estimate pay → upsert; records per-source results; one failing source never stops the rest. |
+| `runner.py` | `run_scraper`: for each posting → **already known? skip (just mark still listed)** → already rejected? skip → prefilter → enrich → `assess` (evaluate + pay estimate) → save, else remember as rejected. `run_source`/`run_all`/`run_one` add pacing, low priority and per-source results. `rescore()` re-applies the rules to saved jobs locally. One failing source never stops the rest. |
 | `db.py` | SQLite access: jobs, runs, salary cache, settings; `upsert` merges duplicates (a company-site copy replaces a LinkedIn copy, status/notes are kept). |
-| `scheduler.py` | `is_due()` + a daemon thread inside the web process that triggers scrapes per *Settings → Schedule*. |
+| `scheduler.py` | `pick_next()` (pure) + a daemon thread in the web process: every minute it decides whether one source is due and runs it (trickle: one at a time, spread over the cycle; never-run sources back to back; failed ones retried after 6 h). |
 | `web/app.py` | Flask app factory `create_app(cfg, scheduler_enabled)`: dashboard, job pages, settings, companies, help, status, CSV. Holds the **live `cfg` dict**; saving a setting mutates it, so changes apply instantly. |
 | `cli.py` | `scrape`, `check`, `serve`, `export`. |
 
+## Identity of a posting (what `DB.find_known` decides)
+`jobs.fingerprint` is a unique per-row key (company+title+city + source id + posting day); `jobs.fp` is the non-unique company+title+city.
+Same source+id with a similar date = same opening; same source with a new id = new; other source / no id = same only if `fp` matches and
+dates are within `search.repost_gap_days` (or unknown). Sources flag unreliable dates (`RawJob.extra['date_unreliable']`). The `rejected` table
+remembers dropped postings for 30 days. This is what makes scraping incremental.
+
 ## Key design decisions
+- **Quiet by design**: the target machine is a shared Raspberry Pi. Work is incremental (only new postings), sequential (one source at a time), niced and paced, and Docker caps CPU/RAM (`compose.yaml`).
 - **One live config dict** shared by the web app, the scheduler thread and scrape runs; dashboard edits mutate it and persist to the DB so the separate CLI process sees the same values (`load_config`).
 - **Rules are data, not code**: seniority, role and location rules are regex lists in settings; `filters.py` only applies them.
 - **Prefer public JSON feeds** over HTML scraping; the browser scraper finds job links by URL pattern because class names on big sites are obfuscated and change.

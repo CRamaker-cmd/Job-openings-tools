@@ -12,7 +12,7 @@
  <a href="{{ url_for('status') }}" class="{{ 'on' if here=='status' }}" title="Did the last scrape work?">Status</a>
  <a href="{{ url_for('help_page') }}" class="{{ 'on' if here=='help_page' }}">Help</a>
 </nav>
-{% if running %}<span class="tag new">⏳ scraping…</span>{% endif %}
+{% if running %}<span class="tag new" title="Runs quietly in the background, one company at a time">⏳ scraping {{ running_what }}…</span>{% endif %}
 <a href="{{ url_for('export') }}" title="Download the list as a spreadsheet">CSV</a></header>
 <main>
 {% with msgs = get_flashed_messages(with_categories=true) %}{% for cat, m in msgs %}<div class="flash {{ cat }}">{{ m }}</div>{% endfor %}{% endwith %}
