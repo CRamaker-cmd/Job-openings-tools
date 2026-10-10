@@ -23,11 +23,12 @@ Open `http://<pi-hostname>.local:8787` and follow the **Getting started** checkl
 | Update to a new version | `git pull && docker compose up -d --build` (your data is kept) |
 | Status and resource use | `docker compose ps` · `docker stats jobhunter` |
 | Change the port | edit the **left** number in `ports:` of `compose.yaml` (e.g. `"8899:8787"`), then `docker compose up -d` |
+| Data on an external drive | see [Use an external drive](#use-an-external-drive) |
 | Own config (manual links, db location) | uncomment the `./config.yaml:/app/config.yaml:ro` line in `compose.yaml` |
 
 ## Your data
 
-Jobs, notes, and every setting changed in the dashboard live in the Docker volume `jobhunter-data`.
+Jobs, notes, and every setting changed in the dashboard live in the Docker volume `jobhunter-data` (or on your external drive: see below).
 
 ```bash
 # back up
@@ -35,6 +36,62 @@ docker run --rm -v jobhunter-data:/d -v "$PWD":/b busybox tar czf /b/jobhunter-b
 # restore (into an empty volume)
 docker run --rm -v jobhunter-data:/d -v "$PWD":/b busybox tar xzf /b/jobhunter-backup.tgz -C /d
 ```
+
+## Use an external drive
+
+**What runs where:** the Pi's own CPU and RAM always run the app (a drive only stores things), but *everything it writes* can
+live on your external drive: the app's data, the Docker image and containers, the build cache and the logs. Only the operating
+system, the Docker engine program and the (tiny) project folder stay on the SD card.
+
+### 1. Prepare the drive (once)
+- Use a Linux filesystem, **ext4**. NTFS/exFAT/FAT drives don't keep Linux file permissions and are unreliable for databases
+  (SQLite). If the drive also holds your media in NTFS, make a small ext4 partition for this instead of reformatting everything.
+- Mount it permanently. Find it with `lsblk -f`, then add a line to `/etc/fstab` (use your drive's UUID):
+  ```
+  UUID=1234-ABCD  /mnt/ssd  ext4  defaults,nofail  0  2
+  ```
+  `sudo mkdir -p /mnt/ssd && sudo mount -a` and check `df -h /mnt/ssd`.
+- Give the app a folder it may write to (the container runs as user id 1000):
+  `sudo mkdir -p /mnt/ssd/jobhunter && sudo chown 1000:1000 /mnt/ssd/jobhunter`
+
+### 2. Option A: keep the app's data (jobs, notes, settings) on the drive
+```bash
+JOBHUNTER_DATA=/mnt/ssd/jobhunter docker compose -f compose.yaml -f compose.external-drive.yaml up -d --build
+```
+To make plain `docker compose up -d` do this, copy `.env.example` to `.env` and uncomment its two lines.
+If the drive isn't mounted, the container **refuses to start** instead of silently writing to the SD card.
+If the folder has the wrong owner you get a clear message in `docker compose logs` telling you which `chown` to run.
+
+### 3. Option B: also move Docker's own storage (images, containers, build cache, logs) to the drive
+This keeps the SD card almost write-free. It moves **all** Docker data on this Pi, not just this app:
+```bash
+sudo systemctl stop docker docker.socket
+sudo mkdir -p /mnt/ssd/docker && sudo rsync -aH /var/lib/docker/ /mnt/ssd/docker/      # keeps anything already there
+echo '{ "data-root": "/mnt/ssd/docker" }' | sudo tee /etc/docker/daemon.json          # merge by hand if the file already exists
+sudo mkdir -p /etc/systemd/system/docker.service.d
+printf '[Unit]\nRequiresMountsFor=/mnt/ssd\n' | sudo tee /etc/systemd/system/docker.service.d/wait-for-drive.conf
+sudo systemctl daemon-reload && sudo systemctl start docker
+docker info | grep "Docker Root Dir"          # should show /mnt/ssd/docker
+```
+The `RequiresMountsFor` line makes Docker wait for the drive at boot, so nothing starts before it is mounted.
+Use A and B together for a fully drive-based setup.
+
+### Without Docker
+Set `db_path: /mnt/ssd/jobhunter/jobs.db` in `config.yaml` (the same ext4/owner rules apply) and restart.
+
+### Good to know
+- **Power:** a USB hard disk on a Pi 4 needs enough power. Use a self-powered enclosure or a powered USB hub; under-voltage
+  can corrupt data. An SSD uses far less power than a spinning disk.
+- **Spin-down:** the app writes a little roughly once an hour, so a spinning disk wakes up about that often. Let it sleep
+  between with e.g. `sudo hdparm -S 241 /dev/sdX` (30 minutes) if you like; the app doesn't mind a slow first write.
+- **Backups** are just files: stop the container (`docker compose stop`), copy the folder (`jobs.db` and its `-wal`/`-shm`
+  files together), start again.
+- **Moving later:** stop the container, copy the folder to the new place, point `JOBHUNTER_DATA` at it.
+
+**Tested:** the bind-mount setup above in a Linux container environment: data is written to and read back from the mounted
+folder across container re-creation, a missing folder aborts startup without creating anything, and the wrong-owner case
+gives the clear message. Not tested on a real Pi / USB drive / reboot ordering (the fstab and `data-root` steps are standard Docker and
+Linux practice but unverified here).
 
 ## Clean up completely
 

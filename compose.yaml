@@ -1,6 +1,7 @@
 # Start:   docker compose up -d --build      Open: http://<host>:8787
 # Stop:    docker compose down               (your data is kept in the named volume)
 # Wipe:    docker compose down -v --rmi local   (removes data and the image: nothing is left behind)
+# External drive for the data: add  -f compose.external-drive.yaml  (see docs/DOCKER.md)
 services:
   jobhunter:
     build:

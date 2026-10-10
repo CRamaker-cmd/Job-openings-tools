@@ -18,7 +18,7 @@ docker compose up -d --build
 Open `http://<pi-hostname>.local:8787`, then follow the **Getting started** checklist on the Jobs page:
 fill in your profile → check the companies list → press **Scrape now**. After that it keeps itself fresh in the background.
 Everything lives in one removable container (`docker compose down -v --rmi local` deletes it all). Details, backup, updates and
-Docker installation: [docs/DOCKER.md](docs/DOCKER.md). Without Docker: `./deploy/install.sh` (systemd) or run it by hand
+Docker installation and **keeping everything on an external drive**: [docs/DOCKER.md](docs/DOCKER.md). Without Docker: `./deploy/install.sh` (systemd) or run it by hand
 (`python -m venv .venv && .venv/bin/pip install -r requirements.txt && .venv/bin/python -m jobhunter serve`).
 
 > The dashboard has no login: keep it on your home network and **never port-forward it**.
