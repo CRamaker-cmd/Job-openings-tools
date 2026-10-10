@@ -3,7 +3,9 @@ from __future__ import annotations
 import argparse
 import csv
 import logging
+import os
 import sys
+from pathlib import Path
 
 from .config import load_config
 from .db import DB
@@ -11,7 +13,19 @@ from .runner import run_all
 from .scrapers import build_scrapers
 
 
+def check_data_dir(cfg) -> None:
+    """Fail with a plain-language message if the database folder can't be written (e.g. a drive mounted
+    with the wrong owner), instead of a database traceback."""
+    folder = Path(cfg["db_path"]).parent
+    if folder.is_dir() and not os.access(folder, os.W_OK | os.X_OK):
+        uid = os.getuid() if hasattr(os, "getuid") else "?"
+        sys.exit(f"The data folder {folder} is not writable by this program (running as user id {uid}).\n"
+                 f"On the host, give that user ownership of the folder, e.g.:  sudo chown {uid}:{uid} <the folder on your drive>\n"
+                 f"Also check that the drive is mounted read-write. See docs/DOCKER.md, 'Use an external drive'.")
+
+
 def cmd_scrape(args, cfg):
+    check_data_dir(cfg)
     db = DB(cfg["db_path"])
     results = run_all(cfg, db, args.only)
     failed = 0
@@ -38,6 +52,7 @@ def cmd_check(args, cfg):
 
 
 def cmd_serve(args, cfg):
+    check_data_dir(cfg)
     from waitress import serve
     from .web.app import create_app
     host, port = cfg["web"]["host"], cfg["web"]["port"]

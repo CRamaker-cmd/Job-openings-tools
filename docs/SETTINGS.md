@@ -112,6 +112,6 @@ Managed on the **Companies** page. Each entry has a name, a **tier** (1 = big / 
 | Key | Default | Why it isn't in the UI |
 |---|---|---|
 | `web.host` | `0.0.0.0` | changing the address from the page you're using could lock you out; needs a restart |
-| `web.port` | `8787` | same; pick a port nothing else (e.g. Pi-hole) uses |
+| `web.port` | `8585` | same; pick a port nothing else (e.g. Pi-hole) uses |
 | `db_path` | `data/jobs.db` | where the database lives; it holds the settings themselves |
 | `manual_links` | list | quick links on the Status page; rarely changed |

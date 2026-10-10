@@ -15,14 +15,14 @@ and keep track.
 git clone https://github.com/CRamaker-cmd/Job-openings-tools && cd Job-openings-tools
 docker compose up -d --build
 ```
-Open `http://<pi-hostname>.local:8787`, then follow the **Getting started** checklist on the Jobs page:
+Open `http://<pi-hostname>.local:8585`, then follow the **Getting started** checklist on the Jobs page:
 fill in your profile → check the companies list → press **Scrape now**. After that it keeps itself fresh in the background.
 Everything lives in one removable container (`docker compose down -v --rmi local` deletes it all). Details, backup, updates and
-Docker installation: [docs/DOCKER.md](docs/DOCKER.md). Without Docker: `./deploy/install.sh` (systemd) or run it by hand
+Docker installation and **keeping everything on an external drive**: the step-by-step [docs/SETUP_PI.md](docs/SETUP_PI.md) and [docs/DOCKER.md](docs/DOCKER.md). Without Docker: `./deploy/install.sh` (systemd) or run it by hand
 (`python -m venv .venv && .venv/bin/pip install -r requirements.txt && .venv/bin/python -m jobhunter serve`).
 
 > The dashboard has no login: keep it on your home network and **never port-forward it**.
-> Port 8787 was chosen to stay clear of Pi-hole; change it in `compose.yaml` (Docker) or `config.yaml`.
+> Port 8585 was chosen to stay clear of Pi-hole; change it in `compose.yaml` (Docker) or `config.yaml`.
 
 ### Quiet by design (it shares your Pi with a media server and Pi-hole)
 
@@ -72,6 +72,7 @@ Twilio, Okta, Adobe, Salesforce, NVIDIA, Google, Meta, Apple, Microsoft. Add any
 |---|---|
 | [docs/USER_GUIDE.md](docs/USER_GUIDE.md) | Walkthrough of every page, scoring and pay labels, applying, companies, privacy |
 | [docs/SETTINGS.md](docs/SETTINGS.md) | Every setting, its default and effect (generated from the code) |
+| [docs/SETUP_PI.md](docs/SETUP_PI.md) | **Step-by-step Raspberry Pi setup with an external drive** (filesystem check, Docker, first run, reboot test) |
 | [docs/DOCKER.md](docs/DOCKER.md) | Running in Docker, backups, updates, resource use on a shared Pi |
 | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Failed sources, LinkedIn blocks, pay oddities, port conflicts |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Modules, data flow, design decisions, how to extend (for developers) |

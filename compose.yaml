@@ -1,17 +1,18 @@
-# Start:   docker compose up -d --build      Open: http://<host>:8787
+# Start:   docker compose up -d --build      Open: http://<host>:8585
 # Stop:    docker compose down               (your data is kept in the named volume)
 # Wipe:    docker compose down -v --rmi local   (removes data and the image: nothing is left behind)
+# External drive for the data: add  -f compose.external-drive.yaml  (see docs/DOCKER.md)
 services:
   jobhunter:
     build:
       context: .
       args:
-        WITH_BROWSER: "1"          # "0" = slim image without browser scraping (Google/Meta/Apple/Microsoft)
+        WITH_BROWSER: "${WITH_BROWSER:-1}"   # WITH_BROWSER=0 docker compose up -d --build = slim image without browser scraping (Google/Meta/Apple/Microsoft)
     image: jobhunter:latest
     container_name: jobhunter
     restart: unless-stopped        # comes back after a reboot or crash
     ports:
-      - "8787:8787"                # host:container. Change the LEFT number if 8787 is taken (e.g. by Pi-hole)
+      - "8585:8585"                # host:container. Change the LEFT number if 8585 is taken (e.g. by Pi-hole)
     volumes:
       - jobhunter-data:/app/data   # jobs, notes and all dashboard settings
       # Optional: change port/host/db location or manual links with your own config file:

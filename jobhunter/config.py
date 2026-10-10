@@ -113,7 +113,7 @@ DEFAULTS: dict[str, Any] = {
         "I'd love to talk about how I can contribute to {company}.\n\n"
         "Kind regards,\n{name}\n{email} | {phone}\n{linkedin}\n"
     ),
-    "web": {"host": "0.0.0.0", "port": 8787},
+    "web": {"host": "0.0.0.0", "port": 8585},
 }
 
 

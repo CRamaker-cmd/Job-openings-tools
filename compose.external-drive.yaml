@@ -1,0 +1,15 @@
+# Keep the app's data (jobs, notes, settings) on an external drive instead of Docker's own volume.
+#
+#   1. mount your drive (see docs/DOCKER.md, "Use an external drive"), e.g. at /mnt/ssd
+#   2. mkdir -p /mnt/ssd/jobhunter && sudo chown 1000:1000 /mnt/ssd/jobhunter
+#   3. JOBHUNTER_DATA=/mnt/ssd/jobhunter docker compose -f compose.yaml -f compose.external-drive.yaml up -d --build
+#      (or put  JOBHUNTER_DATA=/mnt/ssd/jobhunter  and  COMPOSE_FILE=compose.yaml:compose.external-drive.yaml  in a file
+#       called .env next to compose.yaml, then plain `docker compose up -d` works)
+services:
+  jobhunter:
+    volumes:
+      - type: bind
+        source: ${JOBHUNTER_DATA:?set JOBHUNTER_DATA to a folder on your external drive, e.g. /mnt/ssd/jobhunter}
+        target: /app/data
+        bind:
+          create_host_path: false   # drive not mounted? FAIL instead of silently writing to the SD card

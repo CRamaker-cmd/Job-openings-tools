@@ -26,9 +26,9 @@ RUN useradd --create-home --uid 1000 app && mkdir -p /app/data && chown -R app:a
 USER app
 ENV JOBHUNTER_CHROMIUM=/usr/bin/chromium
 VOLUME /app/data
-EXPOSE 8787
+EXPOSE 8585
 
 HEALTHCHECK --interval=60s --timeout=10s --start-period=30s --retries=3 \
-  CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8787/status', timeout=8).status==200 else 1)"
+  CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8585/status', timeout=8).status==200 else 1)"
 
 CMD ["python", "-m", "jobhunter", "serve"]

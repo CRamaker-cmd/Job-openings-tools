@@ -181,3 +181,14 @@ def test_runner_paces_itself_and_lowers_priority(monkeypatch, tmp_path):
     assert prio == [1]                                              # low priority applied once
     assert sleeps.count(cfg["schedule"]["pause_between_sources"]) == 1   # rests between the 2 sources, not before the first
     assert sleeps.count(cfg["schedule"]["pause_between_requests"]) == 2  # one pause per detail request
+
+
+def test_unwritable_data_folder_gives_a_clear_message(tmp_path, monkeypatch):
+    from jobhunter import cli
+    cfg = {"db_path": str(tmp_path / "data" / "jobs.db")}
+    (tmp_path / "data").mkdir()
+    cli.check_data_dir(cfg)                                  # writable: fine
+    monkeypatch.setattr(cli.os, "access", lambda *a, **k: False)
+    with pytest.raises(SystemExit) as e:
+        cli.check_data_dir(cfg)
+    assert "not writable" in str(e.value) and "chown" in str(e.value)
