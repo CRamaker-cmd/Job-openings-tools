@@ -1,0 +1,21 @@
+# Reported yearly pay in the Netherlands, EUR gross: company -> level -> [low, high].
+# basis "total" = base + bonus + equity (what Levels.fyi / TechPays report); base is lower.
+# Sparse and self-reported, so treat as a rough guide. Edit/extend freely - your own entries win.
+# Sources: levels.fyi + techpays.com pages (Booking.com, Adyen, Amazon, Uber, Databricks), retrieved Oct 2026.
+Booking.com:
+  basis: total
+  junior: [66000, 90000]     # Levels.fyi level E median ~66k (NL)
+  medior: [105000, 140000]   # TechPays SWE II Amsterdam 115-160k; Levels.fyi Amsterdam median ~137k (all levels)
+Adyen:
+  basis: total
+  medior: [105000, 125000]   # Levels.fyi SE2 ~113k, median ~117-119k total (base ~100k at senior)
+Amazon:
+  basis: total
+  medior: [95000, 160000]    # SDE II Amsterdam: base ~78-105k, total ~94-161k (TechPays, 2021-22 data)
+Uber:
+  basis: total
+  junior: [78000, 113000]    # SWE I (few data points)
+  medior: [112000, 152000]   # SWE II: base ~91-98k, total 112-152k
+Databricks:
+  basis: total
+  medior: [145000, 200000]   # few data points, 2021-22

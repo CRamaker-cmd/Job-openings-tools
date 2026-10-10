@@ -1,0 +1,12 @@
+[Unit]
+Description=Job Hunter web UI
+After=network-online.target
+
+[Service]
+User=__USER__
+WorkingDirectory=__DIR__
+ExecStart=__DIR__/.venv/bin/python -m jobhunter serve
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

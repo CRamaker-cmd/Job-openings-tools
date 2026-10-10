@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Help{% endblock %}
+{% block body %}<div class="help-page">
+<h2 style="margin-top:0">How Job Hunter works</h2>
+<p>Job Hunter looks through company career sites and LinkedIn for <b>software jobs in the Netherlands</b>, throws away what doesn't fit
+(too senior, wrong role, pays too little, outside NL), ranks the rest against your skills, and gives you one list to work through.
+Everything runs on this machine and costs nothing.</p>
+
+<h3>The 60-second tour</h3>
+<ol>
+ <li><b><a href="{{ url_for('settings_page', section='profile') }}">Settings → Profile</a></b>: add your name, email, pitch and skills. Skills decide how jobs score; the rest fills the cover letter.</li>
+ <li><b><a href="{{ url_for('companies_page') }}">Companies</a></b>: employers searched directly. Add or remove any; <b>Test</b> checks it works.</li>
+ <li><b><a href="{{ url_for('index') }}">Jobs</a></b> (the dashboard): press <b>Scrape now</b>, then work down the list, best match first. It also scrapes by itself on a schedule
+     ({% if cfg.schedule.enabled %}every company once every {{ cfg.schedule.every_hours }} hours, one at a time in the background, at low CPU priority{% else %}currently off{% endif %}; <a href="{{ url_for('settings_page', section='schedule') }}">change it</a>).</li>
+ <li>Open a job's <b>Details</b>, copy the cover letter, press <b>Open application page</b>, apply, then press <b>I applied</b> so it moves to the Applied tab.</li>
+</ol>
+
+<h3>Quiet in the background</h3>
+<p>Built to share a small computer with other things: every company is refreshed once every {{ cfg.schedule.every_hours }} hours, one at a time, at low priority.
+<b>Only new job postings are processed</b>: a posting that's already in your list (or was already rejected) is skipped. A role a company <i>re-opens</i> for a new batch counts as new
+(new ID, or posted more than {{ cfg.search.repost_gap_days }} days after the saved one). To make the app look at a job again, open it (or the Hidden tab) and press <b>🗑 Delete</b>.
+<b>Hide</b> (✕) dismisses a job for good. When you change rules in Settings, jobs you already have are re-scored right away.</p>
+
+<h3>The score (0–100)</h3>
+<p>Points for: a junior or medior title (+15), skills from your profile found in the posting (up to +25, more for skills in the title),
+pay (stated +15, typical +15, assumed +10), a fresh posting (up to +10) and a low experience requirement (+5). Unknown pay at an unlisted company costs −10.
+Open any job to see exactly <i>why</i> it got its score.</p>
+
+<h3>Pay: what the labels mean</h3>
+<p>Most postings don't state a salary, so the app works down this list until it finds something:</p>
+<table>
+<tr><td><span class="tag pay">€95k–120k</span></td><td><b>Stated</b> in the posting. If it's below your minimum (<b>€{{ cfg.search.min_salary }}</b>) the job is dropped, unless it's a big company (below).</td></tr>
+<tr><td><span class="tag pay">≈ €105k–125k typical</span></td><td><b>Typical pay</b> for that company and level, from the built-in reported-pay table, otherwise from a quick web search of Glassdoor / Levels.fyi / Indeed snippets. Counts as fine when the <i>middle</i> of the range reaches your minimum. These figures are mostly <i>total</i> compensation (with bonus and stock) and self-reported, so base pay is lower.</td></tr>
+<tr><td><span class="tag growth">🌱 big co, under {{ cfg.search.min_salary // 1000 }}k</span></td><td><b>Big-company exception.</b> You said you'd accept a bit less at a company with career potential. Companies marked <b>Tier 1</b> may pay down to <b>€{{ cfg.search.big_company_min_salary }}</b> (any job title). Change this in <a href="{{ url_for('settings_page', section='matching') }}">Settings → Matching</a>.</td></tr>
+<tr><td><span class="tag pay">💰 likely {{ cfg.search.min_salary // 1000 }}k+ (assumed)</span></td><td>No data found, but it's a Tier 1 company, so it's assumed to pay well. A guess.</td></tr>
+<tr><td><span class="tag bad">⚠ typically €50k–65k</span></td><td>Data says it pays too little. Hidden by default, not deleted.</td></tr>
+<tr><td><span class="tag">pay unknown</span></td><td>No data and not a Tier 1 company. Hidden by default (Pay → Everything shows them).</td></tr>
+</table>
+
+<h3>Applying</h3>
+<p>The app <b>does not submit applications for you</b>: forms differ per company, sit behind logins and captchas, and auto-submitting could send the wrong thing in your name.
+It makes applying fast instead: <b>Apply ↗</b> opens the company's own page; each job page has a ready cover-letter draft with a copy button, a notes box and
+status buttons; <a href="{{ url_for('profile') }}">My snippets</a> has one-click copy for your details. Statuses: <b>new → starred → applied → interview → rejected</b>, or <b>hidden</b> to dismiss.</p>
+
+<h3>Where the jobs come from</h3>
+<ul>
+ <li><b>Public job feeds</b> (Greenhouse, Lever, Ashby, SmartRecruiters, Workday, Jibe, Amazon, Uber): fast and reliable.</li>
+ <li><b>A headless browser</b> for sites with no feed (Google, Meta, Apple, Microsoft): it opens the search page like a person and reads the results.
+  {% if browser_ok %}<span class="ok">Installed on this machine ✓</span>{% else %}<span class="fail">Not installed on this machine</span>: run <code>pip install -r requirements-browser.txt &amp;&amp; playwright install chromium</code> (or <code>sudo apt install chromium</code> and set the browser program in <a href="{{ url_for('settings_page', section='advanced') }}">Settings → Advanced</a>), then restart the app.{% endif %}</li>
+ <li><b>LinkedIn</b>: its public search, to find employers that aren't on your Companies list. Low volume, never uses your account. LinkedIn's terms forbid scraping, so it can be turned off in <a href="{{ url_for('settings_page', section='linkedin') }}">Settings → LinkedIn</a>.</li>
+</ul>
+<p>The same job found twice (e.g. on LinkedIn and the company's site) is merged, and the company's own link is kept.</p>
+
+<h3>Which settings do what</h3>
+<table>
+<tr><td><a href="{{ url_for('settings_page', section='profile') }}">Profile</a></td><td>Your details, cover-letter template, skills &amp; weights.</td></tr>
+<tr><td><a href="{{ url_for('settings_page', section='matching') }}">Matching</a></td><td>Minimum salary, big-company exception, max years of experience, age, remote, what counts as "in the Netherlands".</td></tr>
+<tr><td><a href="{{ url_for('settings_page', section='linkedin') }}">LinkedIn</a></td><td>On/off, search terms, experience levels, how far back and how many pages.</td></tr>
+<tr><td><a href="{{ url_for('settings_page', section='pay') }}">Pay lookups</a></td><td>Web search for typical pay, plus your own pay data per company.</td></tr>
+<tr><td><a href="{{ url_for('settings_page', section='schedule') }}">Schedule</a></td><td>How often it scrapes by itself.</td></tr>
+<tr><td><a href="{{ url_for('settings_page', section='advanced') }}">Advanced</a></td><td>Title rules (regular expressions) and browser options.</td></tr>
+<tr><td><a href="{{ url_for('companies_page') }}">Companies</a></td><td>Add, edit, pause, test and remove employers.</td></tr>
+</table>
+<p class="meta">Changes are saved in the app's database and apply immediately. Only the network address/port and file locations live in <code>config.yaml</code>
+(changing the port from this page could lock you out), and each settings page has a reset-to-defaults button.</p>
+
+<h3>If something looks wrong</h3>
+<ul>
+ <li><b>No jobs at all</b> → <a href="{{ url_for('status') }}">Status</a>: did the scrape run, did sources fail? A company showing <i>failed</i> usually needs its details corrected on the Companies page (use <b>Test</b>).</li>
+ <li><b>Too few jobs</b> → try Pay → Everything, lower the minimum salary, or raise the max years of experience.</li>
+ <li><b>Too many irrelevant jobs</b> → raise the minimum score filter, trim your skills list, or edit the title rules in Advanced.</li>
+ <li><b>Pay looks wrong</b> → numbers are estimates; the job's detail page says where each one came from. Add your own known figures in Pay lookups.</li>
+ <li><b>LinkedIn finds nothing / fails</b> → LinkedIn sometimes blocks automated access for a while. Everything else keeps working.</li>
+</ul>
+<p class="meta">Full documentation: the <code>README.md</code> and <code>docs/</code> folder in the project (user guide, settings reference, troubleshooting, architecture).</p>
+</div>{% endblock %}

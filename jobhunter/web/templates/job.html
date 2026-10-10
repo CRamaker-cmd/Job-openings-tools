@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}{{ job.title }} · {{ job.company }}{% endblock %}
+{% block body %}<script>document.body.dataset.detail=1</script>
+<p><a href="{{ url_for('index') }}">← all jobs</a></p>
+<div class="card">
+ <h2 style="margin:0">{{ job.title }}</h2>
+ <div class="meta">{{ job.company }} · {{ job.location }} · {{ job.level }} · status <b>{{ job.status }}</b>{% if job.applied_at %} (applied {{ job.applied_at[:10] }}){% endif %}</div>
+ <p>{% set pc, pl, pt = job|pay %}<span class="tag {{ pc }}" title="{{ pt }}">{{ pl }}</span> <span class="meta">{{ pt }}</span></p>
+ <div class="row">
+  <a class="btn primary" href="{{ job.url }}" target="_blank" rel="noopener">Open application page ↗</a>
+  {% for s in ['starred','applied','interview','rejected','hidden','new'] %}{% if s!=job.status %}<button onclick="setStatus({{ job.id }},'{{ s }}')">{{ {'new':'Reset to new','starred':'★ Star','applied':'✓ I applied','interview':'Interview','rejected':'Rejected','hidden':'Hide'}[s] }}</button>{% endif %}{% endfor %}
+ </div>
+ <p class="meta"><b>Hide</b> = dismiss it for good (it stays in the Hidden tab and is never re-checked). <b>Delete</b> = forget it completely: if it's still listed on the company's site, the next scrape picks it up again as a new job and re-checks it.
+  <button class="linkish" onclick="if(confirm('Delete this job? It comes back as a new job if it is still listed.'))post('/api/job/{{ job.id }}/delete',{}).then(()=>location='{{ url_for('index') }}')">🗑 Delete</button></p>
+ <p class="meta">Applying: open the page, paste the cover letter below, use <a href="{{ url_for('profile') }}">My snippets</a> for form fields, then press “I applied”.</p>
+</div>
+<div class="card"><h3 style="margin-top:0">Why this score: {{ job.score }}/100</h3>
+ <ul>{% for r in job.reasons|fromjson %}<li>{{ r }}</li>{% else %}<li>Matches your search rules.</li>{% endfor %}</ul>
+ <p class="meta">The score adds points for junior/medior wording, skills from your profile, pay (stated &gt; typical &gt; assumed), company and freshness. Rules are in <a href="{{ url_for('settings_page', section='matching') }}">Settings</a>.</p></div>
+<div class="card"><h3 style="margin-top:0">Cover letter draft</h3>
+ <textarea id="letter">{{ letter }}</textarea>
+ <div class="row" style="margin-top:8px"><button onclick="copyText('letter',this)">Copy letter</button>
+ <span class="meta">Built from your <a href="{{ url_for('settings_page', section='profile') }}">profile & template</a>. Always read it through and personalise it before sending.</span></div></div>
+<div class="card"><h3 style="margin-top:0">Notes</h3>
+ <textarea id="notes" style="min-height:80px" placeholder="Contact person, interview dates, questions… (saved automatically)" onblur="post('/api/job/{{ job.id }}/notes',{notes:this.value})">{{ job.notes }}</textarea></div>
+<div class="card"><h3 style="margin-top:0">Description</h3>
+ <pre class="desc">{{ job.description or 'No description captured — open the posting.' }}</pre></div>
+{% endblock %}
