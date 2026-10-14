@@ -7,7 +7,7 @@ On the **Companies** page, **Test** checks one company right now.
 1. *Status*: did a scrape run? If "no run yet", press **Scrape now** (or check *Settings → Schedule* is on).
 2. Are sources failing? See below.
 3. Filters: Pay → *Everything*, Status → *All*. Jobs with unknown pay are hidden by default.
-4. Rules too strict? *Settings → Matching*: lower the minimum salary, raise "max years of experience asked", widen the age.
+4. Rules too strict? *Settings → Matching*: lower the minimum pay for your country, raise "max years of experience asked", widen the age.
 
 ## A company shows "failed" / Test fails
 | Message | Likely cause and fix |
@@ -60,9 +60,12 @@ The data folder you set in `.env` (`JOBHUNTER_DATA`) doesn't exist. This is inte
 | "The API key was rejected" | Wrong or revoked key: paste it again in Settings → AI agent (an environment variable `JOBHUNTER_AI_API_KEY` takes priority over the saved key; check it too). |
 | "The model ... was not found" / "not allowed to use that model" | Fix the model name in Settings → AI agent, or use a model your key has access to. |
 | "Rate limited" | Wait the number of seconds shown and try again. |
-| "Could not reach the API" | No internet from the Pi/container, or a timeout (a letter can take up to a minute). |
+| "Could not reach ..." | Wrong server address, server not running, or no internet from the Pi/container. For a model on your own network use the machine's LAN address: inside Docker `localhost` is the container itself. |
+| "... took too long to answer" | Slow (often local) model: raise *Give up after* in Settings → AI agent. |
+| "Not found: check the endpoint URL and the model name" | OpenAI-compatible type: the address must end in `/v1` and the model name must exist on that server (e.g. `ollama list`). |
+| "not in the OpenAI chat format" | The address isn't a chat endpoint; use the server's `/v1` address. |
 | "The agent's answer didn't look like a letter" | Try again, or add a short instruction in the box (what to emphasise). |
-| No ✨ button on job pages | The agent is switched off, or there is no key (saved or in the environment). |
+| No ✨ button on job pages | The agent is switched off, or it isn't complete (Claude needs a key; an OpenAI-compatible server needs an address and a model name). |
 
 ## CV upload says "No readable text"
 The PDF is a scan or an image. Export a text-based PDF (or a .docx), or paste your CV text into the *CV text* box in Settings → Profile.

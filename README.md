@@ -1,7 +1,7 @@
 # Job Hunter
 
-A self-hosted job board for a Raspberry Pi. It finds **junior / medior software jobs in the Netherlands** on company
-career sites and LinkedIn, removes what doesn't fit (too senior, wrong role, pays too little, outside NL), ranks the rest
+A self-hosted job board for a Raspberry Pi. It finds **junior / medior software jobs in the countries you pick** (the Netherlands by default) on company
+career sites and LinkedIn, removes what doesn't fit (too senior, wrong role, pays too little, outside your countries), ranks the rest
 against *your* skills, estimates the pay when a posting doesn't state it, and gives you one dashboard to review, apply
 and keep track.
 
@@ -49,17 +49,17 @@ and idles at roughly **60 MB RAM / 0.01 % CPU**. See [docs/DOCKER.md](docs/DOCKE
 
 ## How it decides
 
-- **Drops** senior/staff/principal/lead/manager titles, interns, non-software roles, jobs outside NL, postings asking for more
+- **Drops** senior/staff/principal/lead/manager titles, interns, non-software roles, jobs outside your chosen countries, postings asking for more
   than N years, and postings that **state** a salary below your minimum.
 - **Ranks** (0-100) on junior/medior wording, your weighted skills, pay, company and freshness.
 - **Pay when not stated**: reported-pay table → quick web search (Glassdoor / Levels.fyi / Indeed snippets) → assumption for big
   companies. Every figure shows its source.
-- **Big-company exception**: you'd take a bit less for career potential, so at Tier 1 companies the minimum drops from €90k to
-  a €70k floor (any job title). Both numbers are settings.
+- **Big-company exception**: you'd take a bit less for career potential, so at Tier 1 companies a lower floor applies (default €70k in the Netherlands, any job title). Both numbers are
+  settings, per country.
 - **Applying**: the app does **not** auto-submit applications; it opens the company's page and gives you a motivation letter
   built from your own facts (specific to the posting, honest about skill gaps, English or Dutch), your snippets and tracking.
 - **Several countries**: tick the countries to search; each gets its own row in the pay table (minimum pay and big-company minimum, in its own currency, prefilled by converting your current one); the Jobs page gets a country filter.
-- **AI agent (optional)**: upload your CV, add an Anthropic API key, and press **✨ Agent Customize** on a job: the posting, your facts and CV go to the Claude API and the reply (strictly the letter) fills the letter box for you to check. Off by default; nothing is sent otherwise.
+- **AI agent (optional)**: upload your CV, connect any AI (Claude, any OpenAI-compatible service, or a model running on your own network such as Ollama), and press **✨ Agent Customize** on a job: the posting, your facts and CV go to the endpoint you chose and the reply (strictly the letter) fills the letter box for you to check. Off by default; nothing is sent otherwise.
 - **Salaries**: monthly figures become yearly (× 12 + 8% holiday pay in NL, bonus if stated), other currencies are converted; unknown pay is
   retried later and shown as "pay unknown". Details in the [user guide](docs/USER_GUIDE.md#3-applying).
 
@@ -90,7 +90,7 @@ Twilio, Okta, Adobe, Salesforce, NVIDIA, Google, Meta, Apple, Microsoft. Add any
 - **LinkedIn's terms forbid scraping.** Only the logged-out public search is used, at low volume, never your account; it may
   break or get your IP blocked for a while. It can be switched off in Settings.
 - Pay figures that aren't *stated* are estimates, mostly total compensation (incl. stock/bonus), self-reported and sometimes old.
-- The cover letter is a template: read and personalise it before sending.
+- The motivation letter is built only from the facts you entered (and the AI agent's from those too): always read it, and fill in the one bracketed sentence, before sending.
 
 ## Development
 

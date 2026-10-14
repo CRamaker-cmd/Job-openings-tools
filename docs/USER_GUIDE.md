@@ -1,6 +1,6 @@
 # User guide
 
-Job Hunter finds **software jobs in the Netherlands** on company career sites and LinkedIn, removes what doesn't
+Job Hunter finds **software jobs in the countries you pick** (the Netherlands by default) on company career sites and LinkedIn, removes what doesn't
 fit you, ranks the rest, and gives you one dashboard to review, apply and keep track. It runs on your own machine
 (designed for a Raspberry Pi) and costs nothing: no paid APIs, no accounts.
 
@@ -11,7 +11,7 @@ The dashboard also has a built-in **Help** page covering the same ground in shor
 1. Open the dashboard: `http://<your-pi>.local:8585` (port is set in `config.yaml`, see [Settings](SETTINGS.md)).
 2. The **Getting started** checklist at the top of the Jobs page walks you through:
    - **Settings → Profile**: name, email, phone, LinkedIn, a 2-3 sentence pitch and your **skills with weights**
-     (1 = nice to have, 2 = solid, 3 = core stack). Skills decide how jobs rank; the rest fills the cover letter.
+     (1 = nice to have, 2 = solid, 3 = core stack). Skills decide how jobs rank; the rest feeds your motivation letters.
    - **Companies**: the employers searched directly. Defaults are included; add or remove any (section 5).
    - **Scrape now**: optional, refreshes every company straight away. Otherwise the app already works through the
      companies on its own, one at a time, so jobs appear gradually over the first 10-20 minutes (**Settings → Schedule**).
@@ -47,7 +47,7 @@ Most postings don't state a salary, so the app works down this list until it fin
 |---|---|
 | `€95k-120k` | **Stated** in the posting. Below your minimum → dropped (unless the big-company exception applies). |
 | `≈ €105k-125k typical` | **Typical pay** for that company + level: the reported-pay table (`jobhunter/salary_benchmarks.yaml` plus your own entries), otherwise a quick web search of Glassdoor / Levels.fyi / Indeed result snippets (cached 45 days). Counts as fine when the **midpoint** of the range reaches your minimum. |
-| `🌱 big co, under 90k` | Below your usual minimum but at/above the **big-company floor** (default €70k) at a **Tier 1** company: kept on purpose for the career potential. Applies to any job title. |
+| `🌱 big co, under 90k` | Below your usual minimum but at/above the **big-company floor** (default €70k in the Netherlands) at a **Tier 1** company: kept on purpose for the career potential. Applies to any job title. |
 | `💰 likely 90k+ (assumed)` | No data found, but it's a Tier 1 company, so assumed to pay well. A guess. |
 | `⚠ typically €x-y` | Data says it pays too little. Hidden by default. |
 | `pay unknown` | No data, not a Tier 1 company. Hidden by default (Pay → Everything shows them). |
@@ -77,10 +77,11 @@ All under **Settings** in the top bar, saved immediately, each page has *Reset t
 
 | Page | Use it to |
 |---|---|
-| Profile & cover letter | Your details, pitch, cover-letter template, skills and weights |
-| Matching | Minimum salary, big-company floor & which tiers count, max years asked, max age, remote, what "in the Netherlands" means |
+| Profile & motivation letters | Your details, ambition, achievements, CV upload, skills and weights |
+| Matching | Countries, minimum pay per country (and the lower big-company minimum), which tiers count, max years asked, max age, remote |
 | LinkedIn search | On/off, search terms, experience levels, time window, pages, politeness delay |
 | Pay lookups | Web search for typical pay on/off and limits; your own pay data per company |
+| AI agent | Optional letter writer: Claude, any OpenAI-compatible service, or your own local model |
 | Schedule | Automatic scraping on/off and interval |
 | Advanced | Title rules (regular expressions), browser options |
 
@@ -217,10 +218,20 @@ share. Scanned, image-only PDFs can't be read: paste the text into the box inste
 
 ## 13. AI agent: "Agent Customize" (optional)
 
-*Settings → AI agent*: switch it on and add an **Anthropic API key**. Then every job page gets an **✨ Agent Customize** button next to the
-template letter. Press it and the app sends one request to the Claude API containing everything needed: the job posting, your profile,
-skills, ambition, achievements and your **CV text**, plus anything you typed in the optional *"tell the agent..."* box (for example why you like
-the company). The reply fills the letter box so you can check and edit it; **↩ Back to the template draft** restores the earlier text.
+*Settings → AI agent*: switch it on, choose the **type of service** and fill in the details:
+
+| Type | Fill in | Notes |
+|---|---|---|
+| **Claude (Anthropic API)** | API key (from console.anthropic.com), optional model | Default model `claude-opus-5-5`; `claude-sonnet-5-5` is cheaper. |
+| **OpenAI-compatible** | Server address (up to `/v1`), model name, API key if the service wants one | Works with OpenAI, OpenRouter, Together, Groq, **and models on your own hardware**: Ollama (`http://host:11434/v1`), LM Studio, llama.cpp server, vLLM. Local models need no key. |
+
+Inside Docker, `localhost` is the container itself: for a model running on the Pi or another machine use that machine's LAN address
+(e.g. `http://192.168.1.20:11434/v1`). Small local models can be slow on a Pi: raise *Give up after* if letters time out.
+
+Then every job page gets an **✨ Agent Customize** button next to the built-in letter. Press it and the app sends one request containing everything
+needed: the job posting, your profile, skills, ambition, achievements and your **CV text**, plus anything you typed in the optional
+*"tell the agent..."* box (for example why you like the company). The reply fills the letter box so you can check and edit it;
+**↩ Back to the template draft** restores the earlier text.
 
 How the answer is kept to the letter only:
 - the prompt is strict: the reply must be exactly one `<letter>` block with no greeting, explanation, markdown or notes, the length, structure
@@ -229,9 +240,8 @@ How the answer is kept to the letter only:
 - the app only keeps what is inside the `<letter>` tags and throws everything else away; if the model ignored the format, the usual "Here is your
   letter..." / "Let me know if..." lines and markdown are stripped, and an answer that doesn't look like a letter is rejected with a message.
 
-**Privacy and cost.** Nothing is sent unless you press the button, and then only to Anthropic's API. You pay per use on your own Anthropic account
-(typically a few cents per letter with the default model; check current pricing, and set a **spending limit** on the key). The default model is
-`claude-opus-5-5`; change it in the settings (for example `claude-sonnet-5-5` is cheaper).
+**Privacy and cost.** Nothing is sent unless you press the button, and then only to the address you configured (Anthropic's API, your chosen service, or your own machine).
+Hosted services bill per use (typically a few cents per letter; check current pricing and set a **spending limit** on the key); a model on your own network is free.
 
 **Keeping the key safe.** The key is stored in the app's database on your drive, is **write-only** (never shown again or included in any page,
 leave the box empty to keep it, tick *Remove* to delete it) and never appears in error messages. To keep it out of the database entirely, set the
