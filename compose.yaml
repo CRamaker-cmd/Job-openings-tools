@@ -19,6 +19,7 @@ services:
       # - ./config.yaml:/app/config.yaml:ro
     environment:
       TZ: Europe/Amsterdam
+      JOBHUNTER_AI_API_KEY: ${JOBHUNTER_AI_API_KEY:-}   # optional: key for the AI agent (Settings -> AI agent); keeps it out of the database
     # ---- Be a good neighbour on a shared Raspberry Pi (media server, Pi-hole, ...) -------------------------
     cpus: 1.0                      # never more than one core (of four on a Pi 4)...
     cpu_shares: 128                # ...and a small weight: when anything else wants CPU, it wins (default is 1024)

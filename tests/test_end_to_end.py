@@ -35,7 +35,7 @@ def test_pipeline_and_web(tmp_path):
     assert b"Software Engineer" in c.get("/").data
     jid = rows[0]["id"]
     page = c.get(f"/job/{jid}").data
-    assert b"Cover letter" in page and b"Adyen hiring team" in page
+    assert b"Motivation letter draft" in page and b"Adyen" in page
     assert c.post(f"/api/job/{jid}/status", json={"status": "applied"}).status_code == 200
     assert db.get(jid)["applied_at"] and not db.list_jobs(status="open")
     assert c.post(f"/api/job/{jid}/status", json={"status": "bogus"}).status_code == 400

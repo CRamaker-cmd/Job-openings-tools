@@ -8,6 +8,7 @@ from __future__ import annotations
 from typing import Iterator
 
 from ..models import RawJob
+from ..pay import monthly_to_yearly
 from .base import Scraper, html_to_text, parse_dt
 
 
@@ -69,8 +70,11 @@ class Lever(Scraper):
             posted_at=parse_dt(j.get("createdAt")),
         )
         sr = j.get("salaryRange") or {}
-        if sr.get("currency") == "EUR" and "year" in sr.get("interval", "").lower():
-            job.salary_min, job.salary_max = int(sr.get("min", 0)) or None, int(sr.get("max", 0)) or None
+        if sr.get("currency") == "EUR" and sr.get("max"):
+            interval = sr.get("interval", "").lower()
+            f = 1 if "year" in interval else monthly_to_yearly(1, self.cfg) if "month" in interval else 0
+            if f:
+                job.salary_min, job.salary_max = int(sr.get("min", 0) * f) or None, int(sr["max"] * f)
         return job
 
 
@@ -104,9 +108,11 @@ class Ashby(Scraper):
         comp = (j.get("compensation") or {})
         for comp_tier in comp.get("compensationTiers") or []:
             for c in comp_tier.get("components") or []:
-                if c.get("compensationType") == "Salary" and c.get("currencyCode") == "EUR" \
-                        and "year" in c.get("interval", "").lower():
-                    job.salary_min, job.salary_max = c.get("minValue"), c.get("maxValue")
+                if c.get("compensationType") == "Salary" and c.get("currencyCode") == "EUR" and c.get("maxValue"):
+                    interval = c.get("interval", "").lower()
+                    f = 1 if "year" in interval else monthly_to_yearly(1, self.cfg) if "month" in interval else 0
+                    if f:
+                        job.salary_min, job.salary_max = int((c.get("minValue") or 0) * f) or None, int(c["maxValue"] * f)
         return job
 
 
@@ -115,18 +121,20 @@ class SmartRecruiters(Scraper):
     """https://api.smartrecruiters.com/v1/companies/<id>/postings  (description needs a 2nd call)"""
 
     def fetch(self) -> Iterator[RawJob]:
-        cid, offset = self.entry["company_id"], 0
-        while True:
-            data = self.get_json(
-                f"https://api.smartrecruiters.com/v1/companies/{cid}/postings",
-                params={"country": "nl", "limit": 100, "offset": offset},
-            )
-            items = data.get("content", [])
-            for j in items:
-                yield self.parse(j)
-            offset += len(items)
-            if not items or offset >= data.get("totalFound", 0):
-                break
+        cid = self.entry["company_id"]
+        for country in self.countries():
+            offset = 0
+            while True:
+                data = self.get_json(
+                    f"https://api.smartrecruiters.com/v1/companies/{cid}/postings",
+                    params={"country": country.code.lower(), "limit": 100, "offset": offset},
+                )
+                items = data.get("content", [])
+                for j in items:
+                    yield self.parse(j)
+                offset += len(items)
+                if not items or offset >= data.get("totalFound", 0):
+                    break
 
     def parse(self, j: dict) -> RawJob:
         loc = j.get("location") or {}
@@ -200,21 +208,23 @@ class Workday(Scraper):
 class Jibe(Scraper):
     """https://<host>/api/jobs?page=N&limit=100&keywords=..  e.g. jobs.booking.com
 
-    config: host, optional keywords/location
+    config: host, optional keywords  (the location searched = each selected country)
     """
 
     def fetch(self) -> Iterator[RawJob]:
-        host, page = self.entry["host"], 1
-        while True:
-            params = {"page": page, "limit": 100, "keywords": self.entry.get("keywords", "software"),
-                      "location": self.entry.get("location", "Netherlands")}
-            data = self.get_json(f"https://{host}/api/jobs", params=params)
-            jobs = data.get("jobs", [])
-            for j in jobs:
-                yield self.parse(j.get("data", j))
-            if not jobs or page * 100 >= data.get("totalCount", 0) or page >= 10:
-                break
-            page += 1
+        host = self.entry["host"]
+        for country in self.countries():
+            page = 1
+            while True:
+                params = {"page": page, "limit": 100, "keywords": self.entry.get("keywords", "software"),
+                          "location": country.name}
+                data = self.get_json(f"https://{host}/api/jobs", params=params)
+                jobs = data.get("jobs", [])
+                for j in jobs:
+                    yield self.parse(j.get("data", j))
+                if not jobs or page * 100 >= data.get("totalCount", 0) or page >= 10:
+                    break
+                page += 1
 
     def parse(self, d: dict) -> RawJob:
         host = self.entry["host"]

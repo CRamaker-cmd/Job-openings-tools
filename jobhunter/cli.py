@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import csv
 import logging
 import os
 import sys
@@ -66,12 +65,7 @@ def cmd_serve(args, cfg):
 
 def cmd_export(args, cfg):
     db = DB(cfg["db_path"])
-    rows = db.list_jobs(status=args.status, pay="all")
-    w = csv.writer(sys.stdout)
-    w.writerow(["score", "status", "company", "title", "location", "level", "pay", "url"])
-    for r in rows:
-        w.writerow([r["score"], r["status"], r["company"], r["title"], r["location"],
-                    r["level"], r["pay_confidence"], r["url"]])
+    db.export_csv(sys.stdout, args.status)
 
 
 def main(argv=None):

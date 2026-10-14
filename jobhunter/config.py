@@ -3,7 +3,7 @@ from __future__ import annotations
 import copy
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 import yaml
 
@@ -20,22 +20,31 @@ DEFAULTS: dict[str, Any] = {
         "location": "",
         "pitch": "",
         "years_experience": 3,
+        # Material for the motivation letters (all optional; the letters get better the more of this is filled in)
+        "job_title": "",              # e.g. "Medior Software Engineer"
+        "employer": "",               # e.g. "GS1 Nederland"
+        "ambition": "",               # where you want to grow: the heart of the letter
+        "ambition_nl": "",            # same, in Dutch (optional)
+        "achievements": [],           # [{tags: [...], en: "...", nl: "..."}] concrete things you did
+        "letter_language": "auto",    # auto = match the posting; en; nl
+        "cv_text": "",                # the text of your CV (read from your upload; editable)
+        "cv_filename": "",            # name of the uploaded file
         # skill -> weight (1-3). Matched against job title + description.
         "skills": {},
     },
     "search": {
-        "country_keywords": [
-            "netherlands", "nederland", "amsterdam", "rotterdam", "utrecht",
-            "eindhoven", "the hague", "den haag", "almere", "amstelveen",
-            "delft", "leiden", "haarlem", "hilversum", "schiphol", "nl",
-        ],
+        "countries": ["NL"],              # which countries to search (see countries.py)
+        "country_keywords": [],           # extra place words that count as "in one of my countries"
         "include_remote": False,
         "max_years_required": 4,
-        "min_salary": 90000,
-        # Companies of these tiers (see `companies:`) are worth a somewhat lower salary for the career
-        # potential: for them the minimum is big_company_min_salary instead of min_salary. [] disables.
-        "big_company_tiers": [1],
-        "big_company_min_salary": 70000,
+        "vacation_allowance_pct": 8,      # added to MONTHLY salaries (Dutch vakantiegeld); not added if the text says it's included
+        "add_bonus": True,                # add a bonus / 13th month when the posting states one
+        "show_unknown_pay": True,         # list jobs whose pay couldn't be determined (marked "pay unknown")
+        "fx_to_eur": {"GBP": 1.15, "CHF": 1.05, "SEK": 0.09, "DKK": 0.134, "NOK": 0.087, "PLN": 0.23},
+        # Minimum yearly gross pay per searched country, in THAT country's own currency:
+        #   min = jobs that state less are dropped;  big = the lower minimum for companies of the "big" tiers below
+        "pay_by_country": {"NL": {"min": 90000, "big": 70000}},
+        "big_company_tiers": [1],           # company tiers (Companies page) that count as "big" for the lower minimum
         "max_age_days": 60,
         "repost_gap_days": 30,   # same role posted this many days apart = a new batch, not a duplicate
         "title_include": [
@@ -73,17 +82,24 @@ DEFAULTS: dict[str, Any] = {
             "software developer", "backend developer",
             "full stack developer", ".NET developer", "C# developer", "python developer",
         ],
-        "location": "Netherlands",
         # LinkedIn experience levels: 2=Entry, 3=Associate, 4=Mid-Senior
         "experience_levels": [2, 3, 4],
         "window_days": 7,
         "pages_per_query": 3,
         "delay_seconds": 3.0,
     },
+    "ai": {
+        "enabled": False,             # show the "Agent Customize" button on jobs
+        "provider": "anthropic",      # "anthropic" (Claude) or "openai" (any OpenAI-compatible endpoint, incl. local models)
+        "base_url": "",               # openai provider only, e.g. http://192.168.1.20:11434/v1
+        "api_key": "",                # write-only in the UI; or set the JOBHUNTER_AI_API_KEY environment variable
+        "model": "",                  # empty = the provider's default (Claude: claude-opus-5-5); required for "openai"
+        "timeout_seconds": 180,
+    },
     "salary": {
         # Used only when a posting doesn't state pay.
         "online_lookup": True,        # quick web search for "<company> salary Netherlands"
-        "max_lookups_per_run": 20,
+        "max_lookups_per_run": 30,
         "cache_days": 45,
         "delay_seconds": 3.0,
         "benchmarks": {},             # extra/overriding {Company: {medior: [lo, hi]}} - see salary_benchmarks.yaml
@@ -103,16 +119,6 @@ DEFAULTS: dict[str, Any] = {
     },
     "companies": [],
     "manual_links": [],
-    "cover_letter": (
-        "Dear {company} hiring team,\n\n"
-        "I'm excited to apply for the {title} role. I'm a software engineer with "
-        "{years} years of experience building and operating production services, "
-        "most recently as a Medior Software Engineer at GS1 Nederland.\n\n"
-        "{pitch}\n\n"
-        "{skills_line}\n\n"
-        "I'd love to talk about how I can contribute to {company}.\n\n"
-        "Kind regards,\n{name}\n{email} | {phone}\n{linkedin}\n"
-    ),
     "web": {"host": "0.0.0.0", "port": 8585},
 }
 
@@ -127,6 +133,22 @@ def _merge(base: dict, over: dict) -> dict:
     return out
 
 
+LEGACY_PAY_KEYS = ("min_salary", "big_company_min_salary", "min_salary_by_country", "big_company_min_by_country")
+
+
+def _legacy_pay_rows(get, base_rows: dict) -> Optional[dict]:
+    """Settings from before pay was one table (separate minimum / big-company / per-country fields) -> the new rows."""
+    mn, big = get("min_salary"), get("big_company_min_salary")
+    by, byb = get("min_salary_by_country") or {}, get("big_company_min_by_country") or {}
+    if mn is None and big is None and not by and not byb:
+        return None
+    nl = dict(base_rows.get("NL") or {"min": 90000, "big": 70000})
+    rows = {**base_rows, "NL": {"min": mn if mn is not None else nl["min"], "big": big if big is not None else nl["big"]}}
+    for code, v in by.items():
+        rows[code] = {"min": v, "big": byb.get(code, round(v * rows["NL"]["big"] / max(rows["NL"]["min"], 1), -3))}
+    return rows
+
+
 def load_base(path: str | Path | None = None) -> dict[str, Any]:
     """Defaults + config.yaml, WITHOUT the settings edited on the dashboard."""
     if path:
@@ -139,6 +161,13 @@ def load_base(path: str | Path | None = None) -> dict[str, Any]:
     if path.exists():
         user = yaml.safe_load(path.read_text()) or {}
     cfg = _merge(DEFAULTS, user)
+    user_search = user.get("search") or {}
+    if "pay_by_country" not in user_search:        # an older config.yaml: convert its pay settings
+        rows = _legacy_pay_rows(user_search.get, cfg["search"]["pay_by_country"])
+        if rows:
+            cfg["search"]["pay_by_country"] = rows
+    for k in LEGACY_PAY_KEYS:
+        cfg["search"].pop(k, None)
     # Docker/containers: point at the system Chromium without editing any file
     exe = os.environ.get("JOBHUNTER_CHROMIUM")
     if exe and not cfg["browser"].get("executable"):
@@ -155,5 +184,10 @@ def load_config(path: str | Path | None = None) -> dict[str, Any]:
     from .settings import apply_overrides, read_overrides
 
     cfg = load_base(path)
-    apply_overrides(cfg, read_overrides(cfg["db_path"]))
+    ov = read_overrides(cfg["db_path"])
+    if "search.pay_by_country" not in ov:           # settings saved before pay became one table
+        rows = _legacy_pay_rows(lambda k: ov.get("search." + k), cfg["search"]["pay_by_country"])
+        if rows:
+            ov["search.pay_by_country"] = rows
+    apply_overrides(cfg, {k: v for k, v in ov.items() if k.split(".")[-1] not in LEGACY_PAY_KEYS})
     return cfg

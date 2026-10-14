@@ -66,6 +66,11 @@ class Scraper:
         """Fetch the full description. Only called for jobs that passed the cheap prefilter."""
 
     # helpers
+    def countries(self):
+        """The countries currently being searched (Settings -> Matching)."""
+        from ..countries import selected
+        return selected(self.cfg)
+
     def get_json(self, url: str, **kw):
         r = self.http.get(url, timeout=30, **kw)
         r.raise_for_status()

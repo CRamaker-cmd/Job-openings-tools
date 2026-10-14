@@ -1,0 +1,5 @@
+# Dev-only lint config: `pip install ruff && ruff check .`
+line-length = 140
+[lint]
+select = ["F", "B", "E7", "E9"]
+ignore = ["E731", "E741", "E702"]   # short lambdas / one-letter names / tiny one-liners are fine here

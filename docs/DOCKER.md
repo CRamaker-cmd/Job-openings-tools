@@ -121,7 +121,7 @@ The app is built to stay out of the way of a media server and Pi-hole:
 | **One refresh a day** | every company is refreshed once per 24 h (setting), **one company at a time**, evenly spread (about one every hour) |
 | **Only new jobs cost anything** | a job already saved, or already looked at and rejected, is only marked "still listed": no detail page, no pay lookup, no scoring |
 | **Lowest CPU priority** | scraping runs at nice 19 inside the container, and the container itself has a small CPU weight (`cpu_shares: 128`) and a one-core cap (`cpus: 1.0`) |
-| **Memory cap** | `mem_limit: 1g`; idle use is small (measured **~34 MB RAM, ~0.02 % CPU** idle in the slim image). Chromium adds a few hundred MB only while it loads a Google/Meta/Apple/Microsoft page, one at a time, with images/video/fonts blocked |
+| **Memory cap** | `mem_limit: 1g`; idle use is small (measured **~60 MB RAM, ~0.01 % CPU** idle in the slim image). Chromium adds a few hundred MB only while it loads a Google/Meta/Apple/Microsoft page, one at a time, with images/video/fonts blocked |
 | **First in line to be stopped** | `oom_score_adj: 500`: if the Pi ever runs out of memory, the kernel stops this container before the media server or Pi-hole |
 | **Gentle on the network** | pauses between requests and between companies (Settings → Schedule), Greenhouse job lists are fetched without descriptions |
 | **Gentle on the SD card** | small, rotated logs; a single SQLite file; no constant writes while idle |

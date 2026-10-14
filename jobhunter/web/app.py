@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import csv
 import io
 import itertools
 import json
@@ -9,12 +8,15 @@ import os
 import threading
 import time
 
-from flask import (Flask, Response, abort, flash, jsonify, redirect, render_template, request,
+from flask import (Flask, Response, send_file, abort, flash, jsonify, redirect, render_template, request,
                    url_for)
 
 from .. import companies as co
 from .. import scheduler, settings
 from ..config import load_base
+from .. import money
+from .. import ai, cv, letters
+from ..countries import COUNTRIES, currency_of, min_salary_for, pay_row, primary_country, selected, suggest_row
 from ..db import DB, STATUSES
 from ..runner import rescore, run_all, run_one
 from ..scrapers import REGISTRY, source_names
@@ -23,27 +25,10 @@ from ..scrapers.browser import playwright_available
 log = logging.getLogger(__name__)
 
 
-def cover_letter(cfg: dict, job) -> str:
-    p = cfg["profile"]
-    matched = json.loads(job["reasons"] or "[]")
-    skills = [r.replace("matches ", "") for r in matched if r.startswith("matches ")]
-    skills_line = (f"My experience with {skills[0]} maps directly to what you're looking for."
-                   if skills else "")
-    fields = dict(
-        company=job["company"], title=job["title"], years=p["years_experience"],
-        pitch=p["pitch"], skills_line=skills_line, name=p["name"], email=p["email"],
-        phone=p["phone"], linkedin=p["linkedin"],
-    )
-    try:
-        text = cfg["cover_letter"].format(**fields)
-    except (KeyError, IndexError, ValueError):  # a typo'd {placeholder} in the template must not break the page
-        text = cfg["cover_letter"]
-    return "\n".join(l.rstrip() for l in text.splitlines()).replace("\n\n\n", "\n\n").strip() + "\n"
-
-
 def create_app(cfg: dict, scheduler_enabled: bool = False) -> Flask:
     app = Flask(__name__)
-    app.secret_key = os.urandom(16)  # only signs the one-request "saved!" messages
+    app.secret_key = os.urandom(16)
+    app.config["MAX_CONTENT_LENGTH"] = cv.MAX_BYTES + 512 * 1024    # uploads are limited to the CV size  # only signs the one-request "saved!" messages
     db = DB(cfg["db_path"])
     lock = threading.Lock()
     state = {"running": False, "what": ""}
@@ -79,43 +64,54 @@ def create_app(cfg: dict, scheduler_enabled: bool = False) -> Flask:
         scheduler.start(cfg, lambda: source_names(cfg), db.last_run_by_origin, start_one)
 
     # ------------------------------------------------------------ template helpers
+    @app.template_filter("flag")
+    def flag(code):
+        c = COUNTRIES.get(code or "")
+        return f"{c.flag} {c.code}" if c else "🌍 remote"
+
     @app.template_filter("fromjson")
     def fromjson(s):
         return json.loads(s or "[]")
 
     @app.template_filter("pay")
     def pay(job):
-        """-> (css class, label, tooltip) describing where the pay figure comes from."""
-        k = lambda n: f"{n // 1000}k"
+        """-> (css class, label, tooltip) describing where the pay figure comes from, in the job's own currency."""
+        cur = currency_of(job["country"] or "")
+        loc = lambda eur: money.to_local(eur, cur, cfg)
+        rng = lambda lo, hi: money.rng(loc(lo), loc(hi), cur)
+        floor = money.fmt(loc(min_salary_for(cfg, job["country"] or primary_country(cfg))), cur)
         conf = job["pay_confidence"]
-        floor = k(cfg["search"]["min_salary"])
         if conf == "stated":
             lo, hi = job["salary_min"] or job["salary_max"], job["salary_max"]
-            return "pay", f"€{k(lo)}–{k(hi)}" if lo != hi else f"€{k(hi)}", "Stated in the job posting"
-        rng = f"€{k(job['est_min'])}–{k(job['est_max'])}" if job["est_max"] else ""
+            return "pay", rng(lo, hi), job["pay_note"] or "Stated in the job posting"
+        est = rng(job["est_min"], job["est_max"]) if job["est_max"] else ""
         note = job["pay_note"] or ""
         if conf == "estimated":
-            return "pay", f"≈ {rng} typical", f"Reported pay for this company/level ({note}). Not in the posting."
+            return "pay", f"≈ {est} typical", f"Reported pay for this company/level ({note}). Not in the posting."
         if conf == "growth":
-            tail = f" ({rng})" if rng else f" (€{k(job['salary_min'] or job['salary_max'])}–{k(job['salary_max'])})"
+            tail = f" ({est})" if est else f" ({rng(job['salary_min'] or job['salary_max'], job['salary_max'])})"
             return "growth", f"🌱 big co, under {floor}" + tail, \
                 f"Below your usual minimum, but kept on purpose: {note or 'big company with career potential'}"
         if conf == "low":
-            return "bad", f"⚠ typically {rng}", f"Reported pay is below your minimum ({note})"
+            return "bad", f"⚠ typically {est}", f"Reported pay is below your minimum ({note})"
         if conf == "likely":
             return "pay", f"💰 likely {floor}+ (assumed)", "No pay data found; assumed from company size"
         return "", "pay unknown", "No pay in the posting and no data found"
 
     @app.context_processor
     def inject():
-        return {"running": state["running"], "running_what": state["what"], "min_salary": cfg["search"]["min_salary"]}
+        pc = primary_country(cfg)
+        cur = currency_of(pc)
+        return {"running": state["running"], "running_what": state["what"],
+                "min_label": money.fmt(pay_row(cfg, pc)["min"], cur), "big_label": money.fmt(pay_row(cfg, pc)["big"], cur)}
 
     def setup_steps():
         p = cfg["profile"]
         runs = db.last_runs()
         return [
-            (bool(p["name"] and p["email"]), "Fill in your profile (name, email, skills) so cover letters and "
-             "skill matching work", url_for("settings_page", section="profile")),
+            (bool(p["name"] and p["email"] and p.get("ambition") and p.get("achievements")),
+             "Fill in your profile: name, email, skills, plus your ambition and a few achievements, which make the "
+             "motivation letters personal", url_for("settings_page", section="profile")),
             (bool(cfg["companies"]), "Check the companies list: add the employers you care about",
              url_for("companies_page")),
             (db.last_run_started() is not None, "Run the first scrape (press Scrape now, or wait for the schedule)", None),
@@ -134,21 +130,39 @@ def create_app(cfg: dict, scheduler_enabled: bool = False) -> Flask:
             "pay": request.args.get("pay", "good"),
             "level": request.args.get("level", ""),
             "sort": request.args.get("sort", "score"),
+            "country": request.args.get("country", ""),
         }
-        jobs = db.list_jobs(**f)
+        su = cfg["search"]["show_unknown_pay"]
+        codes = [c.code for c in selected(cfg)]
+        if f["country"] not in codes:
+            f["country"] = ""
+        jobs = db.list_jobs(**f, show_unknown=su, countries=codes, light=True)
         steps = setup_steps()
         return render_template("index.html", jobs=jobs, f=f, companies=db.companies(),
-                               counts=db.counts(), summary=db.summary(), statuses=STATUSES,
+                               counts=db.counts(), summary=db.summary(su), statuses=STATUSES,
                                steps=steps, setup_done=all(s[0] for s in steps),
-                               hidden_by_pay=len(db.list_jobs(**{**f, "pay": "all"})) - len(jobs))
+                               hidden_by_pay=db.count_jobs(**{k: v for k, v in f.items() if k not in ("sort", "pay")}, pay="all", show_unknown=su, countries=codes) - len(jobs),
+                               countries=[COUNTRIES[c] for c in codes], country_counts=db.country_counts())
 
     @app.get("/job/<int:job_id>")
     def job_page(job_id):
         job = db.get(job_id)
         if job is None:
             abort(404)
-        return render_template("job.html", job=job, letter=cover_letter(cfg, job),
-                               p=cfg["profile"], statuses=STATUSES)
+        lang = request.args.get("lang") if request.args.get("lang") in ("en", "nl") else None
+        letter = letters.generate(cfg, dict(job), variant=request.args.get("v", type=int), language=lang)
+        return render_template("job.html", job=job, letter=letter, lang=lang or "auto", p=cfg["profile"], statuses=STATUSES,
+                               profile_ready=bool(cfg["profile"].get("achievements") and cfg["profile"].get("ambition")),
+                               ai_ready=ai.ready(cfg), ai_model=ai.model_name(cfg), ai_host=ai.host_label(cfg), has_cv=bool(cfg["profile"].get("cv_text")))
+
+    @app.get("/api/job/<int:job_id>/prompt")
+    def api_prompt(job_id):
+        """The ready-made prompt for pasting into any AI chat (built on demand, not embedded in every job page)."""
+        job = db.get(job_id)
+        if job is None:
+            abort(404)
+        lang = request.args.get("lang") if request.args.get("lang") in ("en", "nl") else letters.detect_language(job["description"] or "")
+        return jsonify(prompt=letters.build_prompt(cfg, dict(job), lang))
 
     @app.post("/api/job/<int:job_id>/status")
     def api_status(job_id):
@@ -164,6 +178,35 @@ def create_app(cfg: dict, scheduler_enabled: bool = False) -> Flask:
             abort(404)
         db.delete_job(job_id)
         return jsonify(ok=True)
+
+    ai_lock = threading.Lock()
+
+    @app.post("/api/job/<int:job_id>/agent")
+    def api_agent(job_id):
+        """Ask the AI agent to write the letter for this job. Returns {ok, letter, model, tokens} or {ok: false, error}."""
+        job = db.get(job_id)
+        if job is None:
+            abort(404)
+        if not ai.ready(cfg):
+            return jsonify(ok=False, error="The AI agent is not set up. Switch it on and add an API key in Settings → AI agent."), 400
+        body = request.get_json(silent=True) or {}
+        lang = body.get("lang") if body.get("lang") in ("en", "nl") else None
+        language = lang or (cfg["profile"].get("letter_language") if cfg["profile"].get("letter_language") in ("en", "nl") else None) \
+            or letters.detect_language(job["description"] or "")
+        if not ai_lock.acquire(blocking=False):
+            return jsonify(ok=False, error="The agent is already writing a letter. Wait for it to finish."), 429
+        try:
+            res = ai.generate(cfg, dict(job), language, str(body.get("extra", ""))[:3000])
+        except ai.AIError as e:
+            return jsonify(ok=False, error=str(e)), 502
+        except Exception:
+            log.exception("AI agent failed")
+            return jsonify(ok=False, error="Something went wrong while contacting the agent. See the app log."), 500
+        finally:
+            ai_lock.release()
+        log.info("AI letter for job %s by %s (request %s, %s in / %s out tokens)", job_id, res.model, res.request_id, res.input_tokens, res.output_tokens)
+        return jsonify(ok=True, letter=res.letter, model=res.model, tidied=res.tidied,
+                       words=len(res.letter.split()), tokens={"in": res.input_tokens, "out": res.output_tokens})
 
     @app.post("/api/job/<int:job_id>/notes")
     def api_notes(job_id):
@@ -192,16 +235,12 @@ def create_app(cfg: dict, scheduler_enabled: bool = False) -> Flask:
 
     @app.get("/help")
     def help_page():
-        return render_template("help.html", cfg=cfg, browser_ok=playwright_available())
+        return render_template("help.html", cfg=cfg, browser_ok=playwright_available(), picked_countries=selected(cfg))
 
     @app.get("/export.csv")
     def export():
         out = io.StringIO()
-        w = csv.writer(out)
-        w.writerow(["score", "status", "company", "title", "location", "level", "pay", "url"])
-        for r in db.list_jobs(status=request.args.get("status", "open"), pay="all"):
-            w.writerow([r["score"], r["status"], r["company"], r["title"], r["location"],
-                        r["level"], r["pay_confidence"], r["url"]])
+        db.export_csv(out, request.args.get("status", "open"))
         return Response(out.getvalue(), mimetype="text/csv",
                         headers={"Content-Disposition": "attachment; filename=jobs.csv"})
 
@@ -230,7 +269,7 @@ def create_app(cfg: dict, scheduler_enabled: bool = False) -> Flask:
             abort(404)
         form_values = None
         if request.method == "POST":
-            values, errors = settings.validate_section(sec, request.form)
+            values, errors = settings.validate_section(sec, request.form, cfg)
             if errors:
                 for e in errors:
                     flash(e, "err")
@@ -249,9 +288,23 @@ def create_app(cfg: dict, scheduler_enabled: bool = False) -> Flask:
                 "text": form_values[f.path] if form_values else settings.to_text(f, cur),
                 "default_text": settings.to_text(f, default) if f.kind in ("int", "float", "bool", "text") else "",
                 "modified": cur != default,
+                "has_value": bool(cur) if f.kind == "secret" else False,
             })
+        ticked = {c.code for c in selected(cfg)}
+        if form_values is not None:                       # a failed save: keep what was typed
+            ticked = set(request.form.getlist("search.countries"))
+        pay_rows = []
+        for c in COUNTRIES.values():
+            saved = (cfg["search"].get("pay_by_country") or {}).get(c.code)
+            row = saved or suggest_row(cfg, c.code)
+            if form_values is not None and request.form.get(f"pay.{c.code}.min"):
+                row = {"min": request.form.get(f"pay.{c.code}.min"), "big": request.form.get(f"pay.{c.code}.big", "")}
+            pay_rows.append({"c": c, "min": row["min"], "big": row["big"], "ticked": c.code in ticked,
+                             "symbol": money.sym(c.currency).strip()})
         return render_template("settings.html", sec=sec, rows=rows, sections=settings.SECTIONS,
-                               n_modified=sum(r["modified"] for r in rows))
+                               n_modified=sum(r["modified"] for r in rows), picked=selected(cfg), pay_rows=pay_rows,
+                               ai_env_key=ai.key_from_environment(cfg),
+                               cfg_profile=cfg["profile"])
 
     @app.post("/settings/<section>/reset")
     def settings_reset(section):
@@ -261,6 +314,38 @@ def create_app(cfg: dict, scheduler_enabled: bool = False) -> Flask:
         settings.reset_paths(db, cfg, base_cfg(), settings.section_paths(sec))
         flash(f"'{sec.title}' reset to defaults.", "ok")
         return redirect(url_for("settings_page", section=section))
+
+    # ------------------------------------------------------------ CV upload
+    @app.post("/profile/cv")
+    def cv_upload():
+        f = request.files.get("cv")
+        if f is None or not f.filename:
+            flash("Choose a file first.", "err")
+            return redirect(url_for("settings_page", section="profile"))
+        data = f.read()
+        try:
+            text = cv.extract_text(f.filename, data)
+        except cv.CVError as e:
+            flash(str(e), "err")
+            return redirect(url_for("settings_page", section="profile"))
+        name = cv.save_file(cfg, f.filename, data)
+        settings.save_values(db, cfg, base_cfg(), {"profile.cv_text": text, "profile.cv_filename": f.filename[:120]})
+        flash(f"CV read: {len(text.split())} words from {name}. Check the text below and fix anything odd.", "ok")
+        return redirect(url_for("settings_page", section="profile"))
+
+    @app.post("/profile/cv/remove")
+    def cv_remove():
+        cv.remove_file(cfg)
+        settings.save_values(db, cfg, base_cfg(), {"profile.cv_text": "", "profile.cv_filename": ""})
+        flash("CV removed.", "ok")
+        return redirect(url_for("settings_page", section="profile"))
+
+    @app.get("/profile/cv/file")
+    def cv_file():
+        path = cv.stored_file(cfg)
+        if path is None:
+            abort(404)
+        return send_file(path, as_attachment=True, download_name=cfg["profile"].get("cv_filename") or path.name)
 
     # ------------------------------------------------------------ companies
     def save_companies(items: list) -> None:

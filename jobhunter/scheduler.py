@@ -46,7 +46,7 @@ def pick_next(now: datetime, sources: list[str], last: dict[str, tuple[str, bool
     if not due:
         return None
     due.sort()
-    oldest, name = due[0]
+    name = due[0][1]
     latest_any = max((_dt(s) for s, _ in last.values()), default=None)
     healthy = name in last and last[name][1]  # only routine refreshes of working sources are spaced out
     slot = cycle / len(sources) if (healthy and spread) else timedelta(0)

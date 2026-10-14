@@ -52,3 +52,10 @@ form.filters{align-items:flex-end}label.f{display:flex;flex-direction:column;fon
 fieldset.ats-f{border:1px solid var(--line);border-radius:10px;margin-bottom:12px}fieldset label{display:block;margin-bottom:8px}
 td.acts{display:flex;gap:6px;flex-wrap:wrap;align-items:center}td.acts form{margin:0}tr.off{opacity:.55}
 .help-page h2{margin-top:28px}.help-page h3{margin-bottom:4px}.help-page code{background:var(--card);border:1px solid var(--line);padding:0 5px;border-radius:5px}
+
+table.paytable{width:auto;border:1px solid var(--line);border-radius:10px;background:var(--card)}
+table.paytable th{font-size:12px;color:var(--muted);font-weight:600}table.paytable td{vertical-align:middle;white-space:nowrap}
+.cur{display:inline-block;min-width:34px;text-align:right;color:var(--muted)}
+
+.agentbox{border:1px dashed var(--accent);border-radius:12px;padding:12px;margin-top:12px;display:flex;flex-direction:column;gap:8px}
+.agentbox textarea{min-height:0;width:100%}

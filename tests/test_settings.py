@@ -21,42 +21,41 @@ def env(tmp_path):
 
 def test_parse_and_validation():
     f = {x.path: x for s in settings.SECTIONS for x in s.fields}
-    assert settings.parse(f["search.min_salary"], MultiDict({"search.min_salary": "90.000"})) == 90000
+    assert settings.parse(f["search.pay_by_country"], MultiDict([("search.countries", "NL"), ("pay.NL.min", "90.000"), ("pay.NL.big", "70,000")])) == \
+           {"NL": {"min": 90000, "big": 70000}}
     assert settings.parse(f["profile.skills"], MultiDict({"profile.skills": "C#: 3\n.NET:2\nDocker"})) == {"C#": 3, ".NET": 2, "Docker": 1}
     assert settings.parse(f["search.include_remote"], MultiDict({})) is False
     assert settings.parse(f["search.include_remote"], MultiDict({"search.include_remote": "on"})) is True
     assert settings.parse(f["linkedin.experience_levels"],
                           MultiDict([("linkedin.experience_levels", "3"), ("linkedin.experience_levels", "2")])) == [2, 3]
-    for path, bad in [("search.min_salary", "lots"), ("search.max_years_required", "99"),
+    for path, bad in [("search.max_years_required", "99"), ("search.max_age_days", "lots"),
                       ("profile.skills", "C#: 9"), ("search.title_include", "(oops"),
                       ("salary.benchmarks", "Mollie | senior | 1 | 2"), ("schedule.every_hours", "0")]:
         with pytest.raises(ValueError):
             settings.parse(f[path], MultiDict({path: bad}))
 
 
-def test_settings_persist_apply_live_and_reset(env):
+def test_settings_persist_apply_live_and_reset(env, full_form):
     tmp, cfg, c = env
-    form = {"search.min_salary": "85000", "search.big_company_min_salary": "65000", "search.max_years_required": "3",
-            "search.max_age_days": "30", "search.repost_gap_days": "30", "search.country_keywords": "netherlands\namsterdam",
-            "search.big_company_tiers": "1"}
+    form = full_form(cfg, "matching", **{"pay.NL.min": "85000", "pay.NL.big": "65000",
+                                         "search.max_years_required": "3", "search.max_age_days": "30",
+                                         "search.country_keywords": "stad\nstreek"})
     r = c.post("/settings/matching", data=form, follow_redirects=True)
     assert b"Saved" in r.data
-    assert cfg["search"]["min_salary"] == 85000 and cfg["search"]["include_remote"] is False  # live in the running app
+    assert cfg["search"]["pay_by_country"]["NL"] == {"min": 85000, "big": 65000} and cfg["search"]["include_remote"] is False   # live in the running app
     # a *separate process* (the CLI scraper) sees it too, because it is stored in the DB
-    assert load_config(tmp / "config.yaml")["search"]["min_salary"] == 85000
-    assert load_config(tmp / "config.yaml")["search"]["country_keywords"] == ["netherlands", "amsterdam"]
+    assert load_config(tmp / "config.yaml")["search"]["pay_by_country"]["NL"]["min"] == 85000
+    assert load_config(tmp / "config.yaml")["search"]["country_keywords"] == ["stad", "streek"]
     # invalid input saves nothing and shows the reason
-    bad = c.post("/settings/matching", data={**form, "search.min_salary": "abc"}, follow_redirects=True)
-    assert b"must be a number" in bad.data and cfg["search"]["min_salary"] == 85000
+    bad = c.post("/settings/matching", data={**form, "pay.NL.min": "abc"}, follow_redirects=True)
+    assert b"must be a yearly amount in EUR" in bad.data and cfg["search"]["pay_by_country"]["NL"]["min"] == 85000
     # reset
     c.post("/settings/matching/reset")
-    assert cfg["search"]["min_salary"] == 90000
-    assert load_config(tmp / "config.yaml")["search"]["min_salary"] == 90000
+    assert cfg["search"]["pay_by_country"]["NL"]["min"] == 90000
+    assert load_config(tmp / "config.yaml")["search"]["pay_by_country"]["NL"]["min"] == 90000
     # values equal to the base default are not stored at all
-    c.post("/settings/matching", data={**form, "search.min_salary": "90000", "search.big_company_min_salary": "70000",
-                                       "search.max_years_required": "4", "search.max_age_days": "60", "search.repost_gap_days": "30",
-                                       "search.country_keywords": "\n".join(load_base(tmp / "config.yaml")["search"]["country_keywords"])})
-    assert settings.read_overrides(cfg["db_path"]).get("search.min_salary") is None
+    c.post("/settings/matching", data=full_form(cfg, "matching"))
+    assert settings.read_overrides(cfg["db_path"]) == {}
 
 
 def test_every_settings_page_renders(env):
@@ -69,12 +68,11 @@ def test_every_settings_page_renders(env):
         assert c.get(url).status_code == 200, url
 
 
-def test_profile_settings_change_cover_letter(env):
+def test_profile_settings_change_cover_letter(env, full_form):
     _, cfg, c = env
-    form = {"profile.name": "Caz", "profile.email": "c@x.nl", "profile.phone": "1", "profile.linkedin": "li",
-            "profile.github": "", "profile.location": "Almere", "profile.years_experience": "3",
-            "profile.pitch": "I build APIs.", "cover_letter": "Hi {company}, I am {name}. {pitch}",
-            "profile.skills": "C#: 3"}
+    form = full_form(cfg, "profile", **{"profile.name": "Caz", "profile.email": "c@x.nl", "profile.phone": "1", "profile.linkedin": "li",
+            "profile.location": "Almere", "profile.pitch": "I build APIs.",
+            "profile.skills": "C#: 3"})
     assert b"Saved" in c.post("/settings/profile", data=form, follow_redirects=True).data
     assert cfg["profile"]["skills"] == {"C#": 3} and cfg["profile"]["name"] == "Caz"
 

@@ -22,10 +22,12 @@ Config example:
 """
 from __future__ import annotations
 
+import importlib.util
 import logging
 import re
 from typing import Iterator
 
+from ..countries import keywords_for
 from ..http import polite_sleep
 from ..models import RawJob
 from .base import Scraper
@@ -68,11 +70,7 @@ class BrowserUnavailable(RuntimeError):
 
 
 def playwright_available() -> bool:
-    try:
-        import playwright.sync_api  # noqa: F401
-        return True
-    except ImportError:
-        return False
+    return importlib.util.find_spec("playwright") is not None      # cheap: doesn't import the package
 
 
 class Browser(Scraper):
@@ -109,7 +107,7 @@ class Browser(Scraper):
 
         e = self.entry
         pattern = e["link_pattern"]
-        kws = self.cfg["search"]["country_keywords"]
+        kws = keywords_for(self.cfg)
         with sync_playwright() as p:
             browser = p.chromium.launch(
                 headless=True, executable_path=self.bc.get("executable"),
@@ -159,7 +157,7 @@ class Browser(Scraper):
         text = self._detail.evaluate(MAIN_TEXT_JS)
         job.description = re.sub(r"\n{3,}", "\n\n", text).strip()
         if not job.location:  # listing didn't show one: take the first line that names an NL place
-            kws = self.cfg["search"]["country_keywords"]
+            kws = keywords_for(self.cfg)
             for line in job.description.splitlines()[:60]:
                 if len(line) < 120 and any(re.search(rf"(?<![\w]){re.escape(k)}(?![\w])", line, re.I) for k in kws):
                     job.location = line.strip()

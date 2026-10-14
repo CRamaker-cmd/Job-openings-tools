@@ -1,6 +1,7 @@
 """Only new postings cost anything; known and previously rejected ones are skipped."""
 import pytest
 
+from helpers import set_pay
 from jobhunter.config import load_config
 from jobhunter.db import DB
 from jobhunter.models import RawJob
@@ -18,7 +19,7 @@ class Src(Scraper):
         self.src, self.items, self.detail_calls = source, items, []
 
     def fetch(self):
-        for ext, title, desc in self.items:
+        for ext, title, _desc in self.items:
             yield RawJob(source=self.src, origin=self.name, company="Adyen", title=title, url=f"http://{self.src}/{ext}",
                          location="Amsterdam, Netherlands", external_id=ext)
 
@@ -99,17 +100,17 @@ def test_rescore_applies_new_rules_locally(env):
     rows = {r["title"]: r for r in db.list_jobs(pay="all")}
     db.set_status(rows["Backend Engineer"]["id"], "starred")
     cfg["search"]["big_company_tiers"] = []              # (Src labels everything "Adyen", a big company: switch that exception off)
-    cfg["search"]["min_salary"] = 99000                  # raise the bar: both postings still reach it (max 100k / 99k)
+    set_pay(cfg, "NL", min=99000)                  # raise the bar: both postings still reach it (max 100k / 99k)
     done, moved = rescore(cfg, db)
     after = {r["title"]: r["status"] for r in db.list_jobs(status="all", pay="all")}
     assert after["Software Engineer"] == "new" and done == 2                            # both still pass
-    cfg["search"]["min_salary"] = 120000                 # now neither does
+    set_pay(cfg, "NL", min=120000)                 # now neither does
     done, moved = rescore(cfg, db)
     after = {r["title"]: r["status"] for r in db.list_jobs(status="all", pay="all")}
     assert moved == 1 and after["Software Engineer"] == "hidden" and after["Backend Engineer"] == "starred"  # starred is never moved
 
 
-def test_web_delete_and_rescore_message(env):
+def test_web_delete_and_rescore_message(env, full_form):
     cfg, db, est = env
     run_scraper(Src(cfg, "Adyen", "greenhouse", ITEMS), cfg, db, "2026-10-10T00:00:00+00:00", est)
     c = create_app(cfg).test_client()
@@ -117,8 +118,7 @@ def test_web_delete_and_rescore_message(env):
     assert b"Delete" in c.get(f"/job/{row['id']}").data
     assert c.post(f"/api/job/{row['id']}/delete").status_code == 200 and db.get(row["id"]) is None
     assert c.post("/api/job/999/delete").status_code == 404
-    form = {"search.min_salary": "90000", "search.big_company_min_salary": "70000", "search.max_years_required": "4",
-            "search.max_age_days": "60", "search.repost_gap_days": "30", "search.country_keywords": "netherlands", "search.big_company_tiers": "1"}
+    form = full_form(cfg, "matching")
     assert b"Re-scored" in c.post("/settings/matching", data=form, follow_redirects=True).data
 
 
@@ -195,3 +195,42 @@ def test_rejected_repost_is_looked_at_again(env):
     assert scrape(env, "lever", [("a1", 0, {})], 2).known == 1                 # remembered as rejected: not re-evaluated
     cfg["search"]["max_years_required"] = 4
     assert scrape(env, "lever", [("a1", 60, {})], 3).new == 1                  # re-posted 60 days later: checked again, now passes
+
+
+# ---------------------------------------------------------------- jobs saved with unknown pay get another chance
+def test_unknown_pay_jobs_are_retried_in_later_runs_within_the_lookup_budget(env):
+    from jobhunter.runner import refresh_unknown_pay
+    cfg, db, _ = env
+    cfg["salary"]["online_lookup"], cfg["salary"]["max_lookups_per_run"], cfg["salary"]["delay_seconds"] = True, 3, 0
+
+    def fake_estimator():
+        est = Estimator(cfg, db)
+
+        def fake_get(url, params=None, timeout=0):
+            co = params["q"].split(" software engineer")[0]
+            class R:
+                status_code = 200
+                text = f'<div class="result">{co} software engineer salary: average €96,000 per year</div>'
+            return R()
+        est.http.get = fake_get
+        return est
+
+    class Many(Scraper):
+        def fetch(self):
+            for i in range(8):
+                yield RawJob(source="linkedin", origin="LinkedIn NL", company=f"Co{i} BV", title="Software Engineer", url=f"u{i}",
+                             location="Amsterdam, Netherlands", external_id=str(i), description="Python and Docker.")
+    cfg["salary"]["max_lookups_per_run"] = 0                                    # first run: web lookups unavailable
+    run_scraper(Many(cfg, {"name": "L"}), cfg, db, "2026-10-14T00:00:00+00:00", fake_estimator())
+    unknown = lambda: sum(1 for r in db.list_jobs(pay="all") if r["pay_confidence"] == "unknown")
+    assert unknown() == 8
+    assert len(db.list_jobs(pay="good", show_unknown=True)) == 8               # visible by default, marked "pay unknown"
+    assert len(db.list_jobs(pay="good", show_unknown=False)) == 0              # ...and hideable with the setting
+
+    cfg["salary"]["max_lookups_per_run"] = 3
+    est = fake_estimator()
+    assert refresh_unknown_pay(cfg, db, est) == 3 and est.lookups == 3          # budget respected
+    assert unknown() == 5
+    est2 = fake_estimator()
+    assert refresh_unknown_pay(cfg, db, est2) == 3 and unknown() == 2           # the next run continues where the last stopped
+    assert all(r["pay_confidence"] == "estimated" for r in db.list_jobs(pay="all") if r["pay_confidence"] != "unknown")
