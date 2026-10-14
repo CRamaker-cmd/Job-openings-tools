@@ -19,7 +19,8 @@ from typing import Optional
 import yaml
 from bs4 import BeautifulSoup
 
-from .filters import parse_salary
+from .countries import COUNTRIES
+from .pay import parse_pay
 from .http import make_session, polite_sleep
 from .models import _norm
 
@@ -37,7 +38,7 @@ class PayEstimate:
     note: str = ""
 
 
-def parse_snippets(markup: str, company: str) -> list[tuple[int, int]]:
+def parse_snippets(markup: str, company: str, cfg: Optional[dict] = None, country: Optional[str] = None) -> list[tuple[int, int]]:
     """Pull (low, high) EUR yearly figures out of a search-results page, for snippets about `company`."""
     soup = BeautifulSoup(markup, "html.parser")
     name = _norm(company)
@@ -47,9 +48,9 @@ def parse_snippets(markup: str, company: str) -> list[tuple[int, int]]:
         low = text.lower()
         if name not in _norm(text) or not any(w in low for w in PAY_WORDS):
             continue
-        lo, hi = parse_salary(text)
-        if lo:
-            found.append((lo, hi))
+        p = parse_pay(text, cfg, country)  # monthly figures become yearly incl. holiday pay, other currencies become EUR
+        if p:
+            found.append((p.lo, p.hi))
     return found
 
 
@@ -67,30 +68,31 @@ class Estimator:
         self.http = make_session()
         self.lookups = 0
         self.blocked = False
-        data = yaml.safe_load(BENCH_FILE.read_text()) or {}
-        data.update(self.sc.get("benchmarks") or {})  # user entries from config.yaml win
-        self.bench = {_norm(k): v for k, v in data.items()}
+        # The bundled table is Netherlands data; the user's own entries apply wherever they say.
+        self.bench_nl = {_norm(k): v for k, v in (yaml.safe_load(BENCH_FILE.read_text()) or {}).items()}
+        self.bench_user = {_norm(k): v for k, v in (self.sc.get("benchmarks") or {}).items()}
 
     # ------------------------------------------------------------
-    def estimate(self, company: str, level: str) -> Optional[PayEstimate]:
+    def estimate(self, company: str, level: str, country: str = "NL") -> Optional[PayEstimate]:
         level = "junior" if level == "junior" else "medior"  # unspecified -> medior
-        b = self._benchmark(company, level)
+        b = self._benchmark(company, level, country)
         if b:
             return b
         if not self.sc["online_lookup"] or not self.db:
             return None
-        key = f"{_norm(company)}|{level}"
+        key = f"{_norm(company)}|{level}" + ("" if country == "NL" else f"|{country}")
         cached = self.db.salary_cache_get(key, self.sc["cache_days"])
         if cached is not None:
             lo, hi, n = cached
             return PayEstimate(lo, hi, "online", f"{n} web results") if lo else None
         if not self.allow_web or self.blocked or self.lookups >= self.sc["max_lookups_per_run"]:
             return None
-        return self._lookup(company, level, key)
+        return self._lookup(company, level, key, country)
 
-    def _benchmark(self, company: str, level: str) -> Optional[PayEstimate]:
+    def _benchmark(self, company: str, level: str, country: str) -> Optional[PayEstimate]:
         c = _norm(company)
-        for name, entry in self.bench.items():
+        tables = [self.bench_user] + ([self.bench_nl] if country == "NL" else [])
+        for name, entry in ((n, e) for t in tables for n, e in t.items()):
             if name and (name == c or name in c):
                 rng = entry.get(level)
                 if rng:
@@ -98,10 +100,11 @@ class Estimator:
                                        f"reported {entry.get('basis', 'total')} pay, {level}")
         return None
 
-    def _lookup(self, company: str, level: str, key: str) -> Optional[PayEstimate]:
+    def _lookup(self, company: str, level: str, key: str, country: str = "NL") -> Optional[PayEstimate]:
         self.lookups += 1
         role = "junior software engineer" if level == "junior" else "software engineer"
-        q = f"{company} {role} salary Netherlands glassdoor levels.fyi"
+        place = COUNTRIES[country].name if country in COUNTRIES else "Netherlands"
+        q = f"{company} {role} salary {place} glassdoor levels.fyi"
         polite_sleep(self.sc["delay_seconds"])
         try:
             r = self.http.get(SEARCH_URL, params={"q": q}, timeout=20)
@@ -113,7 +116,7 @@ class Estimator:
             self.blocked = True
             log.warning("salary web search failed: %s", e)
             return None
-        agg = aggregate(parse_snippets(r.text, company))
+        agg = aggregate(parse_snippets(r.text, company, self.cfg, country))
         self.db.salary_cache_put(key, *(agg or (0, 0, 0)))  # cache misses too, so we don't retry daily
         if not agg:
             return None

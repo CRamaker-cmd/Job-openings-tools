@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 
 from .ats import Ashby, Greenhouse, Jibe, Lever, SmartRecruiters, Workday
+from ..countries import selected
 from .base import Scraper
 from .browser import Browser, playwright_available
 from .custom import Amazon, Uber
@@ -39,13 +40,15 @@ def _entries(cfg: dict):
 def source_names(cfg: dict) -> list[str]:
     """Names of everything that gets scraped (used by the scheduler). Same rules as build_scrapers."""
     names = [e["name"] for e in _entries(cfg)]
-    return names + (["LinkedIn"] if cfg["linkedin"]["enabled"] else [])
+    if cfg["linkedin"]["enabled"]:
+        names += [f"LinkedIn {c.code}" for c in selected(cfg)]   # one LinkedIn source per searched country
+    return names
 
 
 def build_scrapers(cfg: dict, only: str | None = None, exact: bool = False) -> list[Scraper]:
     out: list[Scraper] = [REGISTRY[e["ats"]](cfg, e) for e in _entries(cfg)]
     if cfg["linkedin"]["enabled"]:
-        out.append(LinkedIn(cfg))
+        out += [LinkedIn(cfg, c) for c in selected(cfg)]
     if only:
         match = (lambda n: n.lower() == only.lower()) if exact else (lambda n: only.lower() in n.lower())
         out = [s for s in out if match(s.name)]

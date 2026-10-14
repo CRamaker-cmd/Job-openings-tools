@@ -6,7 +6,10 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Optional
 
+from . import money
+from .countries import big_floor_for, currency_of, detect_country, in_selected_country, min_salary_for
 from .models import RawJob
+from .pay import parse_pay
 
 AMBIGUOUS_LOCATION = re.compile(r"^\s*$|\b\d+\s+locations?\b|multiple|various|\bglobal\b", re.I)
 
@@ -24,9 +27,8 @@ def _word(term: str) -> re.Pattern:
 def location_ok(location: str, cfg: dict, strict: bool = False) -> bool:
     s = cfg["search"]
     loc = location or ""
-    for kw in s["country_keywords"]:
-        if _word(kw).search(loc):
-            return True
+    if in_selected_country(loc, cfg):
+        return True
     if s["include_remote"] and re.search(r"remote", loc, re.I):
         return True
     if not strict and AMBIGUOUS_LOCATION.search(loc):
@@ -58,50 +60,10 @@ def title_level(title: str, cfg: dict) -> str:
 
 # ---------------------------------------------------------------- salary
 
-_NUM = r"(\d{1,3}(?:[.,]\d{3})+|\d+(?:[.,]\d+)?)\s*(k)?"
-_CUR = r"(?:€|eur(?:o)?s?\b)"
-_RANGE = re.compile(
-    rf"{_CUR}\s*{_NUM}\s*(?:-|–|—|to|tot|and|en)\s*(?:{_CUR}\s*)?{_NUM}", re.I
-)
-_SINGLE = re.compile(rf"{_CUR}\s*{_NUM}", re.I)
-_MONTHLY = re.compile(r"per\s+month|/\s*month|monthly|per\s+maand|p\.?m\.?\b|maand", re.I)
-_HOURLY = re.compile(r"per\s+hour|/\s*h(ou)?r|hourly|per\s+uur", re.I)
-
-
-def _to_number(num: str, k: Optional[str]) -> float:
-    n = num
-    if re.fullmatch(r"\d{1,3}([.,]\d{3})+", n):  # thousands separators
-        n = re.sub(r"[.,]", "", n)
-    else:
-        n = n.replace(",", ".")
-    v = float(n)
-    return v * 1000 if k else v
-
-
-def parse_salary(text: str) -> tuple[Optional[int], Optional[int]]:
-    """Find a yearly EUR range in free text. Returns (min, max) or (None, None)."""
-    if not text:
-        return None, None
-    best: tuple[Optional[int], Optional[int]] = (None, None)
-    for m in list(_RANGE.finditer(text)) + list(_SINGLE.finditer(text)):
-        tail = text[m.end(): m.end() + 40]
-        if _HOURLY.search(tail):
-            continue
-        if m.re is _RANGE:
-            lo = _to_number(m.group(1), m.group(2))
-            hi = _to_number(m.group(3), m.group(4))
-            if m.group(4) and not m.group(2) and hi >= 1000 > lo:  # "€90 - 110k"
-                lo *= 1000
-        else:
-            lo = hi = _to_number(m.group(1), m.group(2))
-        if _MONTHLY.search(tail):
-            lo, hi = lo * 12, hi * 12
-        if not (25_000 <= lo <= 500_000 and lo <= hi <= 600_000):
-            continue
-        cand = (int(lo), int(hi))
-        if best[0] is None or cand[1] > (best[1] or 0):
-            best = cand
-    return best
+def parse_salary(text: str, cfg: Optional[dict] = None) -> tuple[Optional[int], Optional[int]]:
+    """(low, high) yearly gross EUR found in free text, or (None, None). See pay.py for the rules."""
+    p = parse_pay(text, cfg)
+    return (p.lo, p.hi) if p else (None, None)
 
 
 # ---------------------------------------------------------------- experience
@@ -135,6 +97,7 @@ class Evaluation:
     salary_min: Optional[int] = None
     salary_max: Optional[int] = None
     years: Optional[int] = None
+    country: str = ""            # ISO code of the job's country ('' = unknown / remote)
     est_min: Optional[int] = None
     est_max: Optional[int] = None
     pay_source: str = ""
@@ -167,7 +130,7 @@ def evaluate(job: RawJob, cfg: dict, now: Optional[datetime] = None, estimate=No
     if not ok:
         return Evaluation(False, why)
     if not location_ok(job.location, cfg, strict=True):
-        return Evaluation(False, "not in the Netherlands")
+        return Evaluation(False, "not in your selected countries")
     if job.posted_at:
         posted = job.posted_at if job.posted_at.tzinfo else job.posted_at.replace(tzinfo=timezone.utc)
         age = (now - posted).days
@@ -184,16 +147,23 @@ def evaluate(job: RawJob, cfg: dict, now: Optional[datetime] = None, estimate=No
     level = title_level(job.title, cfg)
     tier = company_tier(job.company, cfg)
     # At big companies (career potential) a somewhat lower salary is acceptable: a lower floor applies.
+    country = detect_country(job.location, cfg)
+    cur = currency_of(country) if country else "EUR"
+    min_sal = min_salary_for(cfg, country) if country else s["min_salary"]
     big = tier in s["big_company_tiers"]
-    floor = min(s["big_company_min_salary"], s["min_salary"]) if big else s["min_salary"]
+    floor = (big_floor_for(cfg, country) if country else min(s["big_company_min_salary"], min_sal)) if big else min_sal
+    show = lambda lo, hi: money.rng(money.to_local(lo, cur, cfg), money.to_local(hi, cur, cfg), cur)   # in the country's currency
 
-    sal_min, sal_max = job.salary_min, job.salary_max
+    sal_min, sal_max, pay_note = job.salary_min, job.salary_max, ""
     if sal_min is None:
-        sal_min, sal_max = parse_salary(job.description)
+        found = parse_pay(job.description, cfg, country or None)
+        if found:
+            sal_min, sal_max, pay_note = found.lo, found.hi, found.note
     if sal_max is not None and sal_max < floor:
         return Evaluation(False, f"pays up to {sal_max}")
 
-    ev = Evaluation(True, years=years, salary_min=sal_min, salary_max=sal_max)
+    ev = Evaluation(True, years=years, salary_min=sal_min, salary_max=sal_max, country=country)
+    ev.pay_note = pay_note
     score = 30
 
     ev.level = level
@@ -203,13 +173,12 @@ def evaluate(job: RawJob, cfg: dict, now: Optional[datetime] = None, estimate=No
     else:
         score += 5
 
-    min_sal = s["min_salary"]
     if sal_max is not None:  # stated; if below the usual minimum we only get here via the big-company floor
         ev.pay_source = "posting"
-        rng = f"€{sal_min // 1000}k-{sal_max // 1000}k"
+        rng = show(sal_min, sal_max)
         if sal_max < min_sal:  # between the big-company floor and the normal minimum
             ev.pay_confidence = "growth"
-            ev.pay_note = "below your usual minimum, accepted: big company with career potential"
+            ev.pay_note = (pay_note + "; " if pay_note else "") + "below your usual minimum, accepted: big company with career potential"
             score += 5
             ev.reasons.append(f"big company, salary stated {rng}")
         else:
@@ -219,7 +188,7 @@ def evaluate(job: RawJob, cfg: dict, now: Optional[datetime] = None, estimate=No
     elif estimate is not None:  # reported pay for this company/level beats guessing from company size
         ev.est_min, ev.est_max = estimate.lo, estimate.hi
         ev.pay_source, ev.pay_note = estimate.source, estimate.note
-        rng = f"€{estimate.lo // 1000}k-{estimate.hi // 1000}k"
+        rng = show(estimate.lo, estimate.hi)
         if (estimate.lo + estimate.hi) / 2 >= min_sal:  # midpoint, not the optimistic top end
             ev.pay_confidence = "estimated"
             score += 15

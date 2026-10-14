@@ -31,8 +31,8 @@ def job(company="Acme Corp", **kw):
 
 def test_parse_snippets_filters_by_company_and_pay_words():
     found = parse_snippets(SERP, "Acme Corp")
-    assert (62000, 95000) in found and (72000, 72000) in found and len(found) == 2  # monthly -> yearly
-    assert aggregate(found) == (67000, 83500, 2)
+    assert (62000, 95000) in found and (77760, 77760) in found and len(found) == 2  # monthly x12 + 8% holiday pay
+    assert aggregate(found) == (69880, 86380, 2)
     assert aggregate([]) is None
 
 
@@ -62,7 +62,7 @@ def test_online_lookup_is_cached_and_stops_when_blocked(tmp_path):
 
     est.http.get = lambda *a, **k: (calls.append(1), R())[1]
     e1 = est.estimate("Acme Corp", "medior")
-    assert (e1.lo, e1.hi, e1.source) == (67000, 83500, "online")
+    assert (e1.lo, e1.hi, e1.source) == (69880, 86380, "online")
     est.estimate("Acme Corp", "medior")
     assert len(calls) == 1  # second call came from cache
 

@@ -20,18 +20,28 @@ DEFAULTS: dict[str, Any] = {
         "location": "",
         "pitch": "",
         "years_experience": 3,
+        # Material for the motivation letters (all optional; the letters get better the more of this is filled in)
+        "job_title": "",              # e.g. "Medior Software Engineer"
+        "employer": "",               # e.g. "GS1 Nederland"
+        "ambition": "",               # where you want to grow: the heart of the letter
+        "ambition_nl": "",            # same, in Dutch (optional)
+        "achievements": [],           # [{tags: [...], en: "...", nl: "..."}] concrete things you did
+        "letter_language": "auto",    # auto = match the posting; en; nl
         # skill -> weight (1-3). Matched against job title + description.
         "skills": {},
     },
     "search": {
-        "country_keywords": [
-            "netherlands", "nederland", "amsterdam", "rotterdam", "utrecht",
-            "eindhoven", "the hague", "den haag", "almere", "amstelveen",
-            "delft", "leiden", "haarlem", "hilversum", "schiphol", "nl",
-        ],
+        "countries": ["NL"],              # which countries to search (see countries.py)
+        "min_salary_by_country": {},      # optional per-country minimum, in THAT country's currency, e.g. {"GB": 70000}
+        "big_company_min_by_country": {}, # same, for the big-company floor
+        "country_keywords": [],           # extra place words that count as "in one of my countries"
         "include_remote": False,
         "max_years_required": 4,
         "min_salary": 90000,
+        "vacation_allowance_pct": 8,      # added to MONTHLY salaries (Dutch vakantiegeld); not added if the text says it's included
+        "add_bonus": True,                # add a bonus / 13th month when the posting states one
+        "show_unknown_pay": True,         # list jobs whose pay couldn't be determined (marked "pay unknown")
+        "fx_to_eur": {"GBP": 1.15, "CHF": 1.05, "SEK": 0.09, "DKK": 0.134, "NOK": 0.087, "PLN": 0.23},
         # Companies of these tiers (see `companies:`) are worth a somewhat lower salary for the career
         # potential: for them the minimum is big_company_min_salary instead of min_salary. [] disables.
         "big_company_tiers": [1],
@@ -73,7 +83,6 @@ DEFAULTS: dict[str, Any] = {
             "software developer", "backend developer",
             "full stack developer", ".NET developer", "C# developer", "python developer",
         ],
-        "location": "Netherlands",
         # LinkedIn experience levels: 2=Entry, 3=Associate, 4=Mid-Senior
         "experience_levels": [2, 3, 4],
         "window_days": 7,
@@ -83,7 +92,7 @@ DEFAULTS: dict[str, Any] = {
     "salary": {
         # Used only when a posting doesn't state pay.
         "online_lookup": True,        # quick web search for "<company> salary Netherlands"
-        "max_lookups_per_run": 20,
+        "max_lookups_per_run": 30,
         "cache_days": 45,
         "delay_seconds": 3.0,
         "benchmarks": {},             # extra/overriding {Company: {medior: [lo, hi]}} - see salary_benchmarks.yaml
@@ -103,16 +112,6 @@ DEFAULTS: dict[str, Any] = {
     },
     "companies": [],
     "manual_links": [],
-    "cover_letter": (
-        "Dear {company} hiring team,\n\n"
-        "I'm excited to apply for the {title} role. I'm a software engineer with "
-        "{years} years of experience building and operating production services, "
-        "most recently as a Medior Software Engineer at GS1 Nederland.\n\n"
-        "{pitch}\n\n"
-        "{skills_line}\n\n"
-        "I'd love to talk about how I can contribute to {company}.\n\n"
-        "Kind regards,\n{name}\n{email} | {phone}\n{linkedin}\n"
-    ),
     "web": {"host": "0.0.0.0", "port": 8585},
 }
 

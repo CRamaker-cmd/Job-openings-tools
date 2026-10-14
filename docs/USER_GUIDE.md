@@ -62,8 +62,7 @@ The app **does not submit applications for you**: forms differ per company, sit 
 auto-submitting could send the wrong thing in your name. It makes applying quick instead:
 
 1. **Apply ↗** (or *Open application page* on the job page) opens the company's own page.
-2. On the job's **Details** page copy the **cover-letter draft** (built from your profile and template; always read and
-   personalise it) and use **My snippets** to copy your name, email, phone, LinkedIn and pitch into form fields.
+2. On the job's **Details** page copy the **motivation letter** (see section 9; always read and personalise it) and use **My snippets** to copy your name, email, phone, LinkedIn and pitch into form fields.
 3. Press **✓ I applied**. The job moves to the *Applied* tab with the date. Use *Interview* / *Rejected* as things progress,
    and the **Notes** box for contacts and dates.
 
@@ -149,3 +148,61 @@ The app is meant to run quietly on a shared Raspberry Pi:
 - **To re-check one job yourself**, delete it (🗑): it returns as a new job if it is still listed.
 
 Running it in Docker adds resource limits so the Pi's other services always win; see [DOCKER.md](DOCKER.md).
+
+## 9. Motivation letters
+
+Each job page has a letter draft built from **your own facts**, not boilerplate. Fill in *Settings → Profile → "Material for
+motivation letters"* once: your **ambition** (where you want to grow, in your words), your **current title and employer**, and
+a handful of concrete **achievements** (`tags :: English sentence || Nederlandse zin`, with real numbers and outcomes).
+
+For every posting the app then:
+
+1. **reads it**: language (English or Dutch), one concrete responsibility line (quoted as written), the skills it names that you
+   rate solid or core, the industry (payments, travel, logistics, ...), and a technology it asks for that you do **not** list;
+2. **picks the two achievements** that overlap most with the posting and uses them in your own words;
+3. **only names skills that appear in those achievements' tags**, and only claims daily use of skills weighted 2 or 3;
+4. **states a missing skill honestly** ("I have not used Kafka in production yet ...", naming your closest skill if you have one);
+5. **ties your ambition to the role**, and ends with one concrete next step;
+6. leaves **one [bracketed] sentence for you**: why *this* company in particular.
+
+Buttons: **↻ Another angle** (same facts, different wording and a different mix of achievements), **language** (automatic, English,
+Dutch), **Copy letter** (warns while the bracket is still there), and **Copy prompt for an AI assistant**: a prompt containing the
+rules, your facts and the posting that you can paste into any AI chat (free) for a polished version.
+
+**About "AI detection":** employers increasingly screen for generic text, and nothing can promise to pass that. What helps is what
+this builds on: specific details, real numbers, your own words. Fill the bracketed sentence, change a phrase or two to sound like you,
+and avoid sending near-identical letters to many companies. Stock phrases ("passionate", "fast-paced", "I am writing to apply" ...) are
+never used (a test checks this).
+
+## 10. Several countries and currencies
+
+*Settings → Matching → Countries to search*: tick one or more (Netherlands is the default). Then:
+
+- every source searches all ticked countries (LinkedIn once per country; company feeds are filtered by each job's location);
+- the Jobs page gets a **Country** filter and a flag on each job; jobs from a country you later untick are hidden, not deleted;
+- **minimum salary per country, in that country's own currency** (*Different minimum per country*, e.g. `GB: 70000`, `CH: CHF 120000`);
+  without a line the general minimum (EUR) applies, converted to the country's currency; the big-company minimum is scaled in
+  proportion unless you set one per country too;
+- pay in any currency is converted with the **exchange rates in Settings → Advanced** (approximate defaults) and shown in the job's own currency;
+- Dutch holiday pay (+8% on monthly salaries) is added **only** for jobs in the Netherlands;
+- "Any other site" (browser) entries use the country in their own address: add one per country; the bundled pay table is Netherlands data.
+
+More countries means more requests and a slower refresh, so tick only the ones you will actually apply in.
+
+## 11. How salaries are calculated
+
+Everything is converted to a **yearly gross EUR-equivalent** before it is compared with your minimum (hover over a pay label to see the calculation):
+
+| Posting says | Result |
+|---|---|
+| `€5.500 - €7.000 per maand` / `€5,500/mo` / `5500 en 7000 euro per maand` | monthly × 12 × 1.08 (holiday pay, NL only): €71.3k - €90.7k |
+| `€ 6.000 p.m. incl. vakantiegeld` | × 12 only (already included) |
+| `€6.000 per maand plus 10% bonus` / `€5.000 per maand + 13e maand` | the bonus / 13th month is added; nothing is added when no bonus is stated |
+| `€4.500 - €6.000` (no period) | read as monthly, noted in the tooltip |
+| `€80k - €100k per year`, `€75,000.00/yr` | used as is |
+| `£60,000 - £75,000`, `CHF 100k - 120k` | converted to EUR with the exchange rates setting |
+| `€45 per hour`, `sign-on bonus €10.000`, `relocation allowance €500` | not a salary: ignored |
+
+If a posting states no salary, a typical figure is looked up (reported-pay table, then a web search) and **retried on later runs**
+whenever lookup budget is available. Jobs whose pay is still unknown are **shown, marked "pay unknown"**
+(*Settings → Matching → "Show jobs whose pay I couldn't find"*, on by default), because your minimum only applies when a salary is known.

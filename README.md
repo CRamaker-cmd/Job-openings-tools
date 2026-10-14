@@ -56,8 +56,11 @@ and idles at roughly **34 MB RAM / 0.02 % CPU**. See [docs/DOCKER.md](docs/DOCKE
   companies. Every figure shows its source.
 - **Big-company exception**: you'd take a bit less for career potential, so at Tier 1 companies the minimum drops from €90k to
   a €70k floor (any job title). Both numbers are settings.
-- **Applying**: the app does **not** auto-submit applications; it opens the company's page and gives you the cover letter, your
-  snippets and tracking. Details in the [user guide](docs/USER_GUIDE.md#3-applying).
+- **Applying**: the app does **not** auto-submit applications; it opens the company's page and gives you a motivation letter
+  built from your own facts (specific to the posting, honest about skill gaps, English or Dutch), your snippets and tracking.
+- **Several countries**: tick the countries to search; each has its own minimum salary in its own currency; the Jobs page gets a country filter.
+- **Salaries**: monthly figures become yearly (× 12 + 8% holiday pay in NL, bonus if stated), other currencies are converted; unknown pay is
+  retried later and shown as "pay unknown". Details in the [user guide](docs/USER_GUIDE.md#3-applying).
 
 ## Sources
 

@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
 
+from .countries import detect_country
 from .filters import Evaluation
 from .models import RawJob, fingerprint
 
@@ -20,6 +21,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     company TEXT NOT NULL,
     title TEXT NOT NULL,
     location TEXT,
+    country TEXT,                       -- ISO code ('' = unknown/remote)
     url TEXT NOT NULL,
     description TEXT,
     posted_at TEXT,
@@ -88,6 +90,14 @@ class DB:
             self.conn.execute("UPDATE jobs SET fp = fingerprint WHERE fp IS NULL")  # older rows: key was the base fingerprint
         self.conn.execute("CREATE INDEX IF NOT EXISTS idx_jobs_fp ON jobs(fp)")
         self.conn.execute("CREATE INDEX IF NOT EXISTS idx_jobs_src_ext ON jobs(source, external_id)")
+        if "country" not in have:
+            self.conn.execute("ALTER TABLE jobs ADD COLUMN country TEXT")
+        for r in self.conn.execute("SELECT id, location FROM jobs WHERE country IS NULL").fetchall():
+            self.conn.execute("UPDATE jobs SET country=? WHERE id=?", (detect_country(r["location"] or ""), r["id"]))
+        # LinkedIn used to be one source; it is now one per country. Existing jobs/runs were all Netherlands.
+        self.conn.execute("UPDATE jobs SET origin='LinkedIn NL' WHERE origin='LinkedIn'")
+        self.conn.execute("UPDATE runs SET origin='LinkedIn NL' WHERE origin='LinkedIn'")
+        self.conn.execute("CREATE INDEX IF NOT EXISTS idx_jobs_country ON jobs(country)")
         if "known" not in have_runs:
             self.conn.execute("ALTER TABLE runs ADD COLUMN known INTEGER NOT NULL DEFAULT 0")
         self.conn.commit()
@@ -114,13 +124,13 @@ class DB:
         posted = job.posted_at.isoformat() if job.posted_at else None
         key = self._row_key(job)
         pay = (ev.salary_min, ev.salary_max, ev.pay_confidence, ev.est_min, ev.est_max,
-               ev.pay_source, ev.pay_note, ev.level, ev.score, reasons)
+               ev.pay_source, ev.pay_note, ev.level, ev.score, reasons, ev.country)
         try:
             self.conn.execute(
                 """INSERT INTO jobs (salary_min, salary_max, pay_confidence, est_min, est_max, pay_source,
-                   pay_note, level, score, reasons, fingerprint, fp, source, origin, external_id, company,
+                   pay_note, level, score, reasons, country, fingerprint, fp, source, origin, external_id, company,
                    title, location, url, description, posted_at, first_seen, last_seen)
-                   VALUES (?,?,?,?,?,?,?,?,?,?, ?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?, ?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 pay + (key, fingerprint(job.company, job.title, job.location), job.source, job.origin, job.external_id,
                        job.company, job.title, job.location, job.url, job.description, posted, ts, ts),
             )
@@ -129,7 +139,7 @@ class DB:
         except sqlite3.IntegrityError:  # exactly this opening is already stored: just refresh it
             self.conn.execute(
                 """UPDATE jobs SET active=1, last_seen=?, salary_min=?, salary_max=?, pay_confidence=?, est_min=?,
-                   est_max=?, pay_source=?, pay_note=?, level=?, score=?, reasons=? WHERE fingerprint=?""",
+                   est_max=?, pay_source=?, pay_note=?, level=?, score=?, reasons=?, country=? WHERE fingerprint=?""",
                 (ts,) + pay + (key,))
             self.conn.commit()
             return False
@@ -220,9 +230,9 @@ class DB:
     def update_scoring(self, job_id: int, ev: Evaluation) -> None:
         self.conn.execute(
             """UPDATE jobs SET salary_min=?, salary_max=?, pay_confidence=?, est_min=?, est_max=?, pay_source=?,
-               pay_note=?, level=?, score=?, reasons=? WHERE id=?""",
+               pay_note=?, level=?, score=?, reasons=?, country=? WHERE id=?""",
             (ev.salary_min, ev.salary_max, ev.pay_confidence, ev.est_min, ev.est_max, ev.pay_source,
-             ev.pay_note, ev.level, ev.score, json.dumps(ev.reasons), job_id))
+             ev.pay_note, ev.level, ev.score, json.dumps(ev.reasons), ev.country, job_id))
         self.conn.commit()
 
     def deactivate_unseen(self, origin: str, run_started: str, grace_days: int = 0) -> None:
@@ -265,6 +275,9 @@ class DB:
         min_score: int = 0,
         pay: str = "good",
         level: str = "",
+        show_unknown: bool = True,
+        country: str = "",
+        countries: Optional[list] = None,
         sort: str = "score",
         include_inactive: bool = False,
     ) -> list[sqlite3.Row]:
@@ -285,11 +298,18 @@ class DB:
         if min_score:
             where.append("score>=?")
             args.append(min_score)
-        if pay == "good":
-            where.append("pay_confidence IN ('stated','estimated','likely','growth')")
+        if pay == "good":  # pay that is fine, or (default) not known: the minimum only applies when pay is known
+            ok = "'stated','estimated','likely','growth'" + (",'unknown'" if show_unknown else "")
+            where.append(f"pay_confidence IN ({ok})")
         if level:
             where.append("level=?")
             args.append(level)
+        if country:
+            where.append("country=?")
+            args.append(country)
+        elif countries:  # only the countries currently searched (+ jobs whose country is unknown, e.g. remote)
+            where.append(f"(country IN ({','.join('?' * len(countries))}) OR country='' OR country IS NULL)")
+            args += list(countries)
         order = {
             "score": "score DESC, first_seen DESC",
             "new": "first_seen DESC",
@@ -302,6 +322,10 @@ class DB:
         sql += f" ORDER BY {order} LIMIT 1000"
         return self.conn.execute(sql, args).fetchall()
 
+    def country_counts(self) -> dict[str, int]:
+        return {r[0] or "": r[1] for r in self.conn.execute(
+            "SELECT country, COUNT(*) FROM jobs WHERE active=1 AND status IN ('new','starred') GROUP BY country")}
+
     def companies(self) -> list[str]:
         return [r[0] for r in self.conn.execute(
             "SELECT DISTINCT company FROM jobs WHERE active=1 ORDER BY company COLLATE NOCASE")]
@@ -312,11 +336,11 @@ class DB:
             out[r["status"]] = r["c"]
         return out
 
-    def summary(self) -> dict:
+    def summary(self, show_unknown: bool = True) -> dict:
         """Headline numbers for the dashboard."""
         day_ago = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat(timespec="seconds")
         q = lambda sql, *a: self.conn.execute(sql, a).fetchone()[0]
-        good = "pay_confidence IN ('stated','estimated','likely','growth')"
+        good = "pay_confidence IN ('stated','estimated','likely','growth'" + (",'unknown'" if show_unknown else "") + ")"
         return {
             "new_24h": q(f"SELECT COUNT(*) FROM jobs WHERE active=1 AND status='new' AND first_seen>=? AND {good}", day_ago),
             "top": q(f"SELECT COUNT(*) FROM jobs WHERE active=1 AND status IN ('new','starred') AND score>=75 AND {good}"),

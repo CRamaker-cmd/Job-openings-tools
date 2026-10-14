@@ -14,6 +14,10 @@ No frontend build step; templates are server-rendered with a few lines of vanill
 | `config.py` | Defaults, `load_base()` (defaults + `config.yaml`) and `load_config()` (base + dashboard overrides from the DB). |
 | `settings.py` | **The settings spec** (`SECTIONS` of `Field`s): drives the forms, parsing/validation and the generated docs; storage of overrides (`settings` table, one row per dotted path; values equal to the base aren't stored). |
 | `companies.py` | Per-career-site-type field spec and validation for the Companies page. |
+| `pay.py` | Salary reader: ranges/singles, currency before or after the number, period words in several languages, monthly → yearly (× 12 + holiday pay, NL only), bonus / 13th month, other currencies → EUR; returns an explanation (`note`). Rejects bonuses, hourly rates and one-off money. |
+| `money.py` | Currency symbols, formatting (`£60–75k`) and EUR↔local conversion with the editable exchange rates. Amounts are stored as EUR-equivalents and shown in the job's own currency. |
+| `countries.py` | The searchable countries (ISO codes, LinkedIn location, currency, place-name keywords), location → country detection, per-country minimum salary (entered in local currency) and big-company floor. |
+| `letters.py` | Motivation letters from the user's own facts: posting analysis (language, quoted responsibility line, shared skills, industry, missing skill), achievement selection, honest wording, per-slot independent phrasing, the AI-assistant prompt. Tests enforce no stock phrases and no unfounded skill claims. |
 | `models.py` | `RawJob` dataclass and `fingerprint()` (company+title+city) used to de-duplicate across sources. |
 | `filters.py` | Pure functions: `title_ok`, `location_ok`, `parse_salary`, `years_required`, `evaluate()` → `Evaluation` (reject reason, score, level, pay confidence, reasons). Everything about "is this job relevant / how good". |
 | `salary.py` | `Estimator`: reported-pay table (`salary_benchmarks.yaml`) → cached web-search lookup (DuckDuckGo result snippets, parsed for EUR figures) → `None`. |

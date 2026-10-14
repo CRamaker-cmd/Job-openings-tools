@@ -7,6 +7,7 @@ import time
 from dataclasses import dataclass
 
 from . import filters
+from .countries import selected
 from .db import DB, now_iso
 from .salary import Estimator
 from .scrapers import build_scrapers
@@ -37,7 +38,7 @@ def assess(raw, cfg: dict, estimator=None):
     """Rules + score for one posting, looking up typical pay when the posting doesn't state any."""
     ev = filters.evaluate(raw, cfg)
     if ev.ok and ev.salary_max is None and estimator:
-        est = estimator.estimate(raw.company, ev.level)
+        est = estimator.estimate(raw.company, ev.level, ev.country or selected(cfg)[0].code)
         if est:
             ev = filters.evaluate(raw, cfg, estimate=est)
     return ev
@@ -77,21 +78,41 @@ def run_scraper(scraper: Scraper, cfg: dict, db: DB, started: str, estimator=Non
     return stats
 
 
+def _raw_from_row(r):
+    from datetime import datetime
+    from .models import RawJob
+
+    job = RawJob(source=r["source"], origin=r["origin"], company=r["company"], title=r["title"], url=r["url"],
+                 location=r["location"] or "", external_id=r["external_id"] or "", description=r["description"] or "",
+                 posted_at=datetime.fromisoformat(r["posted_at"]) if r["posted_at"] else None)
+    if r["pay_confidence"] == "stated":  # may have come from a structured field rather than the text
+        job.salary_min, job.salary_max = r["salary_min"], r["salary_max"]
+    return job
+
+
+def refresh_unknown_pay(cfg: dict, db: DB, estimator) -> int:
+    """Jobs saved with 'pay unknown' are never fetched again, so give them another chance to get a pay estimate whenever the
+    lookup budget allows (cached answers are free; new web searches are limited per run). Returns how many got pay data."""
+    improved = 0
+    rows = db.conn.execute(
+        "SELECT * FROM jobs WHERE active=1 AND status IN ('new','starred') AND pay_confidence='unknown' "
+        "ORDER BY first_seen DESC LIMIT 300").fetchall()
+    for r in rows:
+        ev = assess(_raw_from_row(r), cfg, estimator)
+        if ev.ok and ev.pay_confidence != "unknown":
+            db.update_scoring(r["id"], ev)
+            improved += 1
+    return improved
+
+
 def rescore(cfg: dict, db: DB) -> tuple[int, int]:
     """Re-apply the current rules to jobs already saved, using only what is stored: no network at all.
     Returns (jobs re-scored, jobs moved to Hidden because they no longer pass). Starred/applied jobs are
     never moved. Called after rules change, because known jobs are otherwise never looked at again."""
-    from datetime import datetime
-    from .models import RawJob
-
     estimator = Estimator(cfg, db, allow_web=False)
     done = moved = 0
     for r in db.active_rows():
-        job = RawJob(source=r["source"], origin=r["origin"], company=r["company"], title=r["title"], url=r["url"],
-                     location=r["location"] or "", external_id=r["external_id"] or "", description=r["description"] or "",
-                     posted_at=datetime.fromisoformat(r["posted_at"]) if r["posted_at"] else None)
-        if r["pay_confidence"] == "stated":  # may have come from a structured field rather than the text
-            job.salary_min, job.salary_max = r["salary_min"], r["salary_max"]
+        job = _raw_from_row(r)
         ev = assess(job, cfg, estimator)
         if ev.ok:
             db.update_scoring(r["id"], ev)
@@ -114,6 +135,12 @@ def run_source(scraper: Scraper, cfg: dict, db: DB, estimator: Estimator) -> "St
         return e
     db.deactivate_unseen(scraper.origin, started, scraper.deactivate_grace_days)
     db.record_run(started, scraper.origin, True, stats.seen, stats.kept, stats.new, known=stats.known)
+    try:
+        got = refresh_unknown_pay(cfg, db, estimator)
+        if got:
+            log.info("%s: found pay data for %d previously unknown-pay jobs", scraper.name, got)
+    except Exception:
+        log.exception("refreshing unknown-pay jobs failed")
     log.info("%s: %d listed, %d already known, %d new", scraper.name, stats.seen, stats.known, stats.new)
     return stats
 

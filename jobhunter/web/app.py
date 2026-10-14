@@ -15,30 +15,15 @@ from flask import (Flask, Response, abort, flash, jsonify, redirect, render_temp
 from .. import companies as co
 from .. import scheduler, settings
 from ..config import load_base
+from .. import money
+from .. import letters
+from ..countries import COUNTRIES, currency_of, min_salary_for, selected
 from ..db import DB, STATUSES
 from ..runner import rescore, run_all, run_one
 from ..scrapers import REGISTRY, source_names
 from ..scrapers.browser import playwright_available
 
 log = logging.getLogger(__name__)
-
-
-def cover_letter(cfg: dict, job) -> str:
-    p = cfg["profile"]
-    matched = json.loads(job["reasons"] or "[]")
-    skills = [r.replace("matches ", "") for r in matched if r.startswith("matches ")]
-    skills_line = (f"My experience with {skills[0]} maps directly to what you're looking for."
-                   if skills else "")
-    fields = dict(
-        company=job["company"], title=job["title"], years=p["years_experience"],
-        pitch=p["pitch"], skills_line=skills_line, name=p["name"], email=p["email"],
-        phone=p["phone"], linkedin=p["linkedin"],
-    )
-    try:
-        text = cfg["cover_letter"].format(**fields)
-    except (KeyError, IndexError, ValueError):  # a typo'd {placeholder} in the template must not break the page
-        text = cfg["cover_letter"]
-    return "\n".join(l.rstrip() for l in text.splitlines()).replace("\n\n\n", "\n\n").strip() + "\n"
 
 
 def create_app(cfg: dict, scheduler_enabled: bool = False) -> Flask:
@@ -79,29 +64,36 @@ def create_app(cfg: dict, scheduler_enabled: bool = False) -> Flask:
         scheduler.start(cfg, lambda: source_names(cfg), db.last_run_by_origin, start_one)
 
     # ------------------------------------------------------------ template helpers
+    @app.template_filter("flag")
+    def flag(code):
+        c = COUNTRIES.get(code or "")
+        return f"{c.flag} {c.code}" if c else "🌍 remote"
+
     @app.template_filter("fromjson")
     def fromjson(s):
         return json.loads(s or "[]")
 
     @app.template_filter("pay")
     def pay(job):
-        """-> (css class, label, tooltip) describing where the pay figure comes from."""
-        k = lambda n: f"{n // 1000}k"
+        """-> (css class, label, tooltip) describing where the pay figure comes from, in the job's own currency."""
+        cur = currency_of(job["country"] or "")
+        loc = lambda eur: money.to_local(eur, cur, cfg)
+        rng = lambda lo, hi: money.rng(loc(lo), loc(hi), cur)
+        floor = money.fmt(loc(min_salary_for(cfg, job["country"]) if job["country"] else cfg["search"]["min_salary"]), cur)
         conf = job["pay_confidence"]
-        floor = k(cfg["search"]["min_salary"])
         if conf == "stated":
             lo, hi = job["salary_min"] or job["salary_max"], job["salary_max"]
-            return "pay", f"€{k(lo)}–{k(hi)}" if lo != hi else f"€{k(hi)}", "Stated in the job posting"
-        rng = f"€{k(job['est_min'])}–{k(job['est_max'])}" if job["est_max"] else ""
+            return "pay", rng(lo, hi), job["pay_note"] or "Stated in the job posting"
+        est = rng(job["est_min"], job["est_max"]) if job["est_max"] else ""
         note = job["pay_note"] or ""
         if conf == "estimated":
-            return "pay", f"≈ {rng} typical", f"Reported pay for this company/level ({note}). Not in the posting."
+            return "pay", f"≈ {est} typical", f"Reported pay for this company/level ({note}). Not in the posting."
         if conf == "growth":
-            tail = f" ({rng})" if rng else f" (€{k(job['salary_min'] or job['salary_max'])}–{k(job['salary_max'])})"
+            tail = f" ({est})" if est else f" ({rng(job['salary_min'] or job['salary_max'], job['salary_max'])})"
             return "growth", f"🌱 big co, under {floor}" + tail, \
                 f"Below your usual minimum, but kept on purpose: {note or 'big company with career potential'}"
         if conf == "low":
-            return "bad", f"⚠ typically {rng}", f"Reported pay is below your minimum ({note})"
+            return "bad", f"⚠ typically {est}", f"Reported pay is below your minimum ({note})"
         if conf == "likely":
             return "pay", f"💰 likely {floor}+ (assumed)", "No pay data found; assumed from company size"
         return "", "pay unknown", "No pay in the posting and no data found"
@@ -114,8 +106,9 @@ def create_app(cfg: dict, scheduler_enabled: bool = False) -> Flask:
         p = cfg["profile"]
         runs = db.last_runs()
         return [
-            (bool(p["name"] and p["email"]), "Fill in your profile (name, email, skills) so cover letters and "
-             "skill matching work", url_for("settings_page", section="profile")),
+            (bool(p["name"] and p["email"] and p.get("ambition") and p.get("achievements")),
+             "Fill in your profile: name, email, skills, plus your ambition and a few achievements, which make the "
+             "motivation letters personal", url_for("settings_page", section="profile")),
             (bool(cfg["companies"]), "Check the companies list: add the employers you care about",
              url_for("companies_page")),
             (db.last_run_started() is not None, "Run the first scrape (press Scrape now, or wait for the schedule)", None),
@@ -134,21 +127,30 @@ def create_app(cfg: dict, scheduler_enabled: bool = False) -> Flask:
             "pay": request.args.get("pay", "good"),
             "level": request.args.get("level", ""),
             "sort": request.args.get("sort", "score"),
+            "country": request.args.get("country", ""),
         }
-        jobs = db.list_jobs(**f)
+        su = cfg["search"]["show_unknown_pay"]
+        codes = [c.code for c in selected(cfg)]
+        if f["country"] not in codes:
+            f["country"] = ""
+        jobs = db.list_jobs(**f, show_unknown=su, countries=codes)
         steps = setup_steps()
         return render_template("index.html", jobs=jobs, f=f, companies=db.companies(),
-                               counts=db.counts(), summary=db.summary(), statuses=STATUSES,
+                               counts=db.counts(), summary=db.summary(su), statuses=STATUSES,
                                steps=steps, setup_done=all(s[0] for s in steps),
-                               hidden_by_pay=len(db.list_jobs(**{**f, "pay": "all"})) - len(jobs))
+                               hidden_by_pay=len(db.list_jobs(**{**f, "pay": "all"}, show_unknown=su, countries=codes)) - len(jobs),
+                               countries=[COUNTRIES[c] for c in codes], country_counts=db.country_counts())
 
     @app.get("/job/<int:job_id>")
     def job_page(job_id):
         job = db.get(job_id)
         if job is None:
             abort(404)
-        return render_template("job.html", job=job, letter=cover_letter(cfg, job),
-                               p=cfg["profile"], statuses=STATUSES)
+        lang = request.args.get("lang") if request.args.get("lang") in ("en", "nl") else None
+        letter = letters.generate(cfg, dict(job), variant=request.args.get("v", type=int), language=lang)
+        return render_template("job.html", job=job, letter=letter, lang=lang or "auto", p=cfg["profile"], statuses=STATUSES,
+                               ai_prompt=letters.build_prompt(cfg, dict(job), letter.language),
+                               profile_ready=bool(cfg["profile"].get("achievements") and cfg["profile"].get("ambition")))
 
     @app.post("/api/job/<int:job_id>/status")
     def api_status(job_id):
@@ -192,15 +194,15 @@ def create_app(cfg: dict, scheduler_enabled: bool = False) -> Flask:
 
     @app.get("/help")
     def help_page():
-        return render_template("help.html", cfg=cfg, browser_ok=playwright_available())
+        return render_template("help.html", cfg=cfg, browser_ok=playwright_available(), picked_countries=selected(cfg))
 
     @app.get("/export.csv")
     def export():
         out = io.StringIO()
         w = csv.writer(out)
-        w.writerow(["score", "status", "company", "title", "location", "level", "pay", "url"])
+        w.writerow(["score", "status", "company", "title", "country", "location", "level", "pay", "url"])
         for r in db.list_jobs(status=request.args.get("status", "open"), pay="all"):
-            w.writerow([r["score"], r["status"], r["company"], r["title"], r["location"],
+            w.writerow([r["score"], r["status"], r["company"], r["title"], r["country"], r["location"],
                         r["level"], r["pay_confidence"], r["url"]])
         return Response(out.getvalue(), mimetype="text/csv",
                         headers={"Content-Disposition": "attachment; filename=jobs.csv"})
@@ -251,7 +253,7 @@ def create_app(cfg: dict, scheduler_enabled: bool = False) -> Flask:
                 "modified": cur != default,
             })
         return render_template("settings.html", sec=sec, rows=rows, sections=settings.SECTIONS,
-                               n_modified=sum(r["modified"] for r in rows))
+                               n_modified=sum(r["modified"] for r in rows), picked=selected(cfg))
 
     @app.post("/settings/<section>/reset")
     def settings_reset(section):

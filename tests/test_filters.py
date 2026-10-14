@@ -52,7 +52,7 @@ def test_location(cfg):
 
 @pytest.mark.parametrize("text,expected", [
     ("Salary: €95,000 - €120,000 per year", (95000, 120000)),
-    ("between € 4.500 and € 6.000 per maand", (54000, 72000)),
+    ("between € 4.500 and € 6.000 per maand", (58320, 77760)),   # x12 + 8% holiday pay
     ("EUR 90k - 110k", (90000, 110000)),
     ("€90 - 110k", (90000, 110000)),
     ("Pay range €85.000", (85000, 85000)),
@@ -78,7 +78,7 @@ def test_evaluate_good_job(cfg):
 
 
 def test_evaluate_rejects(cfg):
-    assert evaluate(job(location="London, UK"), cfg).reject == "not in the Netherlands"
+    assert evaluate(job(location="London, UK"), cfg).reject == "not in your selected countries"
     assert "years" in evaluate(job(description="8+ years of experience required"), cfg).reject
     assert "pays" in evaluate(job(description="Salary €50.000 - €60.000"), cfg).reject
     old = datetime.now(timezone.utc) - timedelta(days=200)

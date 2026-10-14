@@ -15,7 +15,7 @@ class Amazon(Scraper):
         while True:
             data = self.get_json("https://www.amazon.jobs/en/search.json", params={
                 "base_query": self.entry.get("query", "software"),
-                "country[]": "NLD", "category[]": "software-development",
+                "country[]": [c.iso3 for c in self.countries()], "category[]": "software-development",
                 "result_limit": 100, "offset": offset, "sort": "recent",
             })
             jobs = data.get("jobs", [])
@@ -45,7 +45,7 @@ class Uber(Scraper):
         while True:
             data = self.post_json(
                 "https://www.uber.com/api/loadSearchJobsResults?localeCode=en",
-                {"params": {"location": [{"country": "NLD"}], "department": ["Engineering"]},
+                {"params": {"location": [{"country": c.iso3} for c in self.countries()], "department": ["Engineering"]},
                  "page": page, "limit": 50},
                 headers={"x-csrf-token": "x"},
             )

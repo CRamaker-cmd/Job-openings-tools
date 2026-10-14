@@ -29,8 +29,11 @@ class Throttled(Exception):
 class LinkedIn(Scraper):
     deactivate_grace_days = 30  # a search only shows a rolling window, so be slow to retire jobs
 
-    def __init__(self, cfg: dict, entry=None):
-        super().__init__(cfg, {"name": "LinkedIn"})
+    def __init__(self, cfg: dict, country=None):
+        """One LinkedIn source per searched country, so each is scheduled (and can fail) on its own."""
+        from ..countries import COUNTRIES
+        self.country = country or COUNTRIES["NL"]
+        super().__init__(cfg, {"name": f"LinkedIn {self.country.code}"})
         self.lc = cfg["linkedin"]
 
     def _get(self, url: str, **kw):
@@ -70,7 +73,7 @@ class LinkedIn(Scraper):
         for query in lc["queries"]:
             for page in range(lc["pages_per_query"]):
                 params = {
-                    "keywords": query, "location": lc["location"], "start": page * 25,
+                    "keywords": query, "location": self.country.linkedin_location, "start": page * 25,
                     "f_E": ",".join(str(x) for x in lc["experience_levels"]),
                     "f_TPR": f"r{int(lc['window_days']) * 86400}", "sortBy": "DD",
                 }
@@ -81,6 +84,7 @@ class LinkedIn(Scraper):
                 for job in cards:
                     if job.external_id not in seen:
                         seen.add(job.external_id)
+                        job.origin = self.origin      # "LinkedIn NL": matches this source's name for clean-up of closed jobs
                         yield job
 
     def enrich(self, job: RawJob) -> None:

@@ -13,6 +13,37 @@ profile:
   github: ""
   location: "Almere, Netherlands"
   years_experience: 3
+  job_title: "Medior Software Engineer"
+  employer: "GS1 Nederland"
+  # The heart of your letters: where you want to go. Edit this in your own words (Settings -> Profile).
+  ambition: >-
+    I want to grow into an engineer who designs and owns large, reliable systems, and I learn fastest next to people who
+    have built and run them at scale.
+  ambition_nl: >-
+    Ik wil doorgroeien naar een engineer die grote, betrouwbare systemen ontwerpt en beheert, en ik leer het snelst naast
+    mensen die zulke systemen op schaal hebben gebouwd en draaiend gehouden.
+  # Concrete things you did. The letters pick the two that match each job best and use them in your words.
+  # tags = skills/topics (matched against the posting); en / nl = the sentence in each language (nl is optional)
+  achievements:
+    - tags: [performance, scale, "C#", SQL, Azure]
+      en: "I drove a major performance improvement of the GLN Location Finder registry backend, so it now handles tens of thousands of lookups a day with stable response times."
+      nl: "Ik heb de performance van de GLN Location Finder-registerbackend sterk verbeterd, zodat die nu tienduizenden opvragingen per dag aankan met stabiele responstijden."
+    - tags: ["API design", REST, API, "C#", ".NET", OAuth, Azure, Bicep, NServiceBus, "Cosmos DB"]
+      en: "I led the development of a registry-backed GTIN/GLN lookup service with REST APIs, token-based authentication, separate test and production environments and automated data publication to GS1 Data Source."
+      nl: "Ik leidde de ontwikkeling van een op registerdata gebaseerde GTIN/GLN-opzoekservice met REST-API's, tokenauthenticatie, gescheiden test- en productieomgevingen en geautomatiseerde publicatie naar GS1 Data Source."
+    - tags: ["end-to-end ownership", ownership, stakeholders, agile, Scrum]
+      en: "I own features end to end for a product ecosystem used by 50,000+ people, agreeing scope and trade-offs with the Product Owner and the Solution Architect."
+      nl: "Ik ben eindverantwoordelijk voor features in een productecosysteem met meer dan 50.000 gebruikers en stem scope en afwegingen af met de Product Owner en de Solution Architect."
+    - tags: ["front-end migration", Vue, Angular, frontend, JavaScript]
+      en: "I helped migrate the Location Finder front-end from Angular to Vue.js, which made it easier to maintain and faster to change."
+      nl: "Ik hielp de front-end van de Location Finder te migreren van Angular naar Vue.js, wat onderhoud eenvoudiger en wijzigingen sneller maakte."
+    - tags: ["real-time monitoring", Blazor, real-time, monitoring, "C#", SQL]
+      en: "At Batenburg Bellt I built parts of a Blazor system that monitors real-time PLC alarms and tracks 100k+ assets in an airport."
+      nl: "Bij Batenburg Bellt bouwde ik onderdelen van een Blazor-systeem dat PLC-alarmen in realtime bewaakt en meer dan 100.000 assets op een luchthaven bijhoudt."
+    - tags: ["CRM design", Power Platform, CRM, process, stakeholders]
+      en: "I helped design a CRM on the Power Platform by turning business processes into workable flows and data models together with the people who use them."
+      nl: "Ik hielp een CRM op het Power Platform ontwerpen door bedrijfsprocessen samen met de gebruikers om te zetten in werkbare flows en datamodellen."
+  letter_language: auto
   pitch: >-
     At GS1 Nederland I own features end-to-end for a product/location ecosystem with 50k+ users,
     led a registry-backed GTIN/GLN lookup service with REST APIs, and scaled a location registry

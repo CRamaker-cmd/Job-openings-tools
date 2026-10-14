@@ -4,9 +4,9 @@
 
 Every setting below can be changed in the web UI under **Settings** (and **Companies**). Changes are stored in the database, apply immediately and are shared by the web app and the command-line scraper. Each page has *Reset to defaults*. The *Path* column is the key you can also use in `config.yaml`.
 
-## Profile & cover letter
+## Profile & motivation letters
 
-Your details are used to fill the cover-letter draft and the copy-paste snippets. The skills list drives the match score: a job that mentions your skills ranks higher.
+Your details fill the copy-paste snippets. The rest is the raw material for the motivation letter on every job page: the more of your own facts it has, the more personal and specific each letter is. Skills also drive the match score.
 
 | Setting | Path | Default | What it does |
 |---|---|---|---|
@@ -16,35 +16,45 @@ Your details are used to fill the cover-letter draft and the copy-paste snippets
 | LinkedIn URL | `profile.linkedin` | *(empty)* |  |
 | GitHub URL | `profile.github` | *(empty)* |  |
 | Location | `profile.location` | `Almere, Netherlands` |  |
-| Years of experience | `profile.years_experience` | `3` | Used in the cover letter ({years}). Allowed: 0-40. |
-| Short pitch | `profile.pitch` | `built-in text` | 2-3 sentences about your best work. Inserted into the cover letter as {pitch}. |
-| Cover-letter template | `cover_letter` | `built-in text` | Placeholders: {company} {title} {years} {pitch} {skills_line} {name} {email} {phone} {linkedin}. The draft on each job page is built from this - always read it before sending. |
-| Skills and weights | `profile.skills` | `C#: 3, .NET: 3, ASP.NET: 2, Azure: 3, Python: 2, SQL: 2, ...` | One per line as  Skill: weight  (weight 1 = nice to have, 2 = solid, 3 = your core stack). Matched against the job title and description. |
+| Years of experience | `profile.years_experience` | `3` |  Allowed: 0-40. |
+| Short pitch (for application forms) | `profile.pitch` | `built-in text` | 2-3 sentences, shown on the 'My snippets' page for forms that ask for a summary. |
+| Your current job title | `profile.job_title` | `Medior Software Engineer` | Used as 'As a <title> at <employer>...'. |
+| Your current employer | `profile.employer` | `GS1 Nederland` |  |
+| Your ambition | `profile.ambition` | `built-in text` | The heart of every letter: where you want to grow and what kind of work you want to do more of, in your own words (1-2 sentences, first person). Specific beats grand: 'I want to own the design of high-traffic payment services' says more than 'I want to grow'. |
+| Your ambition in Dutch (optional) | `profile.ambition_nl` | `built-in text` | Used when a letter is written in Dutch. Empty = the English text is used. |
+| Concrete achievements | `profile.achievements` | `performance, scale, C#, SQL, Azure :: I drove a major per...` | One per line:  tags :: English sentence \|\| Nederlandse zin  (the Dutch part is optional). Tags are the skills and topics involved, e.g.  API design, REST, C#, Azure :: I led the development of ... Each letter uses the two achievements that overlap most with the posting, in your own words, and only names skills that appear in their tags. Use real numbers and outcomes: they are what makes a letter specific. |
+| Letter language | `profile.letter_language` | `auto` |  |
+| Skills and weights | `profile.skills` | `C#: 3, .NET: 3, ASP.NET: 2, Azure: 3, Python: 2, SQL: 2, ...` | One per line as  Skill: weight  (weight 1 = nice to have, 2 = solid, 3 = your core stack). Matched against the job title and description. Letters only say you USE skills weighted 2 or 3. |
 
-## Matching: pay, experience, location
+## Matching: countries, pay, experience
 
 What counts as a job worth showing. Jobs that fail these rules are not saved at all.
 
 | Setting | Path | Default | What it does |
 |---|---|---|---|
-| Minimum salary | `search.min_salary` | `90000` | Postings that STATE a salary below this are dropped. When no salary is stated, the pay is estimated instead (see 'Pay lookups'). Jobs at big companies may go lower, see next. Unit: € / year. Allowed: 0-500000. |
+| Countries to search | `search.countries` | `['NL']` | Tick one or more. Every source searches all ticked countries (LinkedIn once per country), and the Jobs page gets a country filter. More countries = more requests = a slower refresh. Company feeds are filtered by each job's location; 'Any other site' (browser) entries use the country in their own address, so add one per country. |
+| Include remote jobs | `search.include_remote` | `off` | Off = only jobs located in the ticked countries. On = also keep jobs whose location says 'Remote' (from any country). |
+| Extra place words (optional) | `search.country_keywords` | *(empty)* | One per line. Extra words that also count as 'in one of my countries', e.g. a small town. The main cities and names of every country are already built in. |
+| Minimum salary | `search.min_salary` | `90000` | Postings that STATE a salary below this are dropped. When no salary is stated, the pay is estimated instead (see 'Pay lookups'). Jobs at big companies may go lower, see next. Monthly salaries are converted to yearly first (see 'How salaries are calculated'). Unit: € / year. Allowed: 0-500000. |
+| Different minimum per country | `search.min_salary_by_country` | *(empty)* | Optional. One per line as  DE: 80000  or  GB: 70000 : the yearly amount in THAT COUNTRY'S OWN CURRENCY (shown below your ticked countries). Countries without a line use the general minimum above, converted to their currency. Postings in any currency are converted with the exchange rates in Settings → Advanced before they are compared. |
 | Lower minimum for big companies | `search.big_company_min_salary` | `70000` | For companies you marked as 'big' (below), this lower minimum applies instead, for any job title. Those jobs are shown with a 🌱 'under 90k' label. Set equal to the minimum to disable. Unit: € / year. Allowed: 0-500000. |
 | Which company tiers count as 'big' | `search.big_company_tiers` | `[1]` | A company's tier is set on the Companies page. LinkedIn jobs from companies you haven't added there are never treated as big. |
+| Big-company minimum per country | `search.big_company_min_by_country` | *(empty)* | Optional, same format (country's own currency). Without a line, the big-company minimum above is scaled in proportion to that country's minimum. |
+| Show jobs whose pay I couldn't find | `search.show_unknown_pay` | `on` | Most postings state no salary and a web search doesn't always find one. On (recommended): such jobs are listed, marked 'pay unknown' and ranked a little lower, because your minimum only applies when a salary is known. Off: they are hidden until a pay estimate is found. |
+| Holiday pay added to monthly salaries | `search.vacation_allowance_pct` | `8` | Monthly gross x 12, plus this holiday allowance (Dutch vakantiegeld is 8 %), unless the posting says it is already included. Set 0 to turn off. Unit: %. Allowed: 0-20. |
+| Add stated bonuses | `search.add_bonus` | `on` | Adds a bonus the posting actually states (e.g. '10% bonus', 'bonus of €5.000', '13th month'). One-off sign-on or relocation money is never added, and nothing is added when no bonus is stated. |
 | Maximum years of experience asked | `search.max_years_required` | `4` | Postings that ask for more years of experience than this are dropped. Title words like 'Senior', 'Staff', 'Lead' are filtered separately (see Advanced). Unit: years. Allowed: 0-20. |
 | Ignore postings older than | `search.max_age_days` | `60` |  Unit: days. Allowed: 1-365. |
 | Treat a re-posted role as new after | `search.repost_gap_days` | `30` | Companies re-open the same role for a new batch. A posting with the same title and company that appears more than this many days after the one already saved counts as a NEW opening and is checked again. A new posting ID always counts as new. Older postings are never re-fetched. Unit: days. Allowed: 1-365. |
-| Include remote jobs | `search.include_remote` | `off` | Off = only jobs located in the Netherlands. On = also keep jobs whose location says 'Remote' (from any country). |
-| Words that mean 'in the Netherlands' | `search.country_keywords` | `netherlands, nederland, amsterdam, rotterdam, utrecht, ei...` | One per line. A job's location must contain one of these words. |
 
 ## LinkedIn search
 
-LinkedIn's public (logged-out) job search, used to find jobs at companies that aren't on your Companies list. It never uses your LinkedIn account. LinkedIn's terms forbid scraping, so keep volume low.
+LinkedIn's public (logged-out) job search, used to find jobs at companies that aren't on your Companies list. It searches each country ticked in Settings → Matching separately. It never uses your LinkedIn account. LinkedIn's terms forbid scraping, so keep volume low.
 
 | Setting | Path | Default | What it does |
 |---|---|---|---|
 | Search LinkedIn | `linkedin.enabled` | `on` |  |
 | Search terms | `linkedin.queries` | `software engineer, junior software engineer, junior devel...` | One per line. Each is searched separately, so more terms = more requests = slower. |
-| Location | `linkedin.location` | `Netherlands` |  |
 | LinkedIn experience levels | `linkedin.experience_levels` | `[2, 3, 4]` |  |
 | Only jobs posted in the last | `linkedin.window_days` | `7` |  Unit: days. Allowed: 1-30. |
 | Result pages per search term | `linkedin.pages_per_query` | `3` | 25 jobs per page. Allowed: 1-10. |
@@ -86,6 +96,7 @@ Regular expressions (case-insensitive, one per line) that decide which job title
 | Skip titles that are too senior | `search.title_too_senior` | `\bsenior\b, \bsr\b, \bstaff\b, \bprincipal\b, \blead\b, \...` | Senior, staff, principal, lead, architect, 'Engineer III', ... |
 | Title marks a junior role | `search.title_junior_markers` | `\bjunior\b, \bjr\b, \bentry\b, \bgraduate\b, \bassociate\...` |  |
 | Title marks a medior role | `search.title_medior_markers` | `\bmedior\b, \bmid[- ]?level\b, \bmid\b, \bintermediate\b,...` |  |
+| Exchange rates to euro | `search.fx_to_eur` | `GBP: 1.15, CHF: 1.05, SEK: 0.09, DKK: 0.134, NOK: 0.087, ...` | Salaries in other currencies are converted with these rates so they can be compared with your minimum. One per line as  GBP: 1.15  (1 unit of that currency in euro). Approximate is fine. |
 | Browser program (optional) | `browser.executable` | *(empty)* | Path to Chromium, e.g. /usr/bin/chromium on a Raspberry Pi. Empty = Playwright's own download. |
 | Pause between page loads | `browser.delay_seconds` | `2` |  Unit: seconds. Allowed: 0-30. |
 

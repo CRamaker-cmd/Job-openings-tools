@@ -4,7 +4,7 @@
 <p><a href="{{ url_for('index') }}">← all jobs</a></p>
 <div class="card">
  <h2 style="margin:0">{{ job.title }}</h2>
- <div class="meta">{{ job.company }} · {{ job.location }} · {{ job.level }} · status <b>{{ job.status }}</b>{% if job.applied_at %} (applied {{ job.applied_at[:10] }}){% endif %}</div>
+ <div class="meta">{{ job.country|flag }} · {{ job.company }} · {{ job.location }} · {{ job.level }} · status <b>{{ job.status }}</b>{% if job.applied_at %} (applied {{ job.applied_at[:10] }}){% endif %}</div>
  <p>{% set pc, pl, pt = job|pay %}<span class="tag {{ pc }}" title="{{ pt }}">{{ pl }}</span> <span class="meta">{{ pt }}</span></p>
  <div class="row">
   <a class="btn primary" href="{{ job.url }}" target="_blank" rel="noopener">Open application page ↗</a>
@@ -12,15 +12,37 @@
  </div>
  <p class="meta"><b>Hide</b> = dismiss it for good (it stays in the Hidden tab and is never re-checked). <b>Delete</b> = forget it completely: if it's still listed on the company's site, the next scrape picks it up again as a new job and re-checks it.
   <button class="linkish" onclick="if(confirm('Delete this job? It comes back as a new job if it is still listed.'))post('/api/job/{{ job.id }}/delete',{}).then(()=>location='{{ url_for('index') }}')">🗑 Delete</button></p>
- <p class="meta">Applying: open the page, paste the cover letter below, use <a href="{{ url_for('profile') }}">My snippets</a> for form fields, then press “I applied”.</p>
+ <p class="meta">Applying: open the page, paste the motivation letter below, use <a href="{{ url_for('profile') }}">My snippets</a> for form fields, then press “I applied”.</p>
 </div>
 <div class="card"><h3 style="margin-top:0">Why this score: {{ job.score }}/100</h3>
  <ul>{% for r in job.reasons|fromjson %}<li>{{ r }}</li>{% else %}<li>Matches your search rules.</li>{% endfor %}</ul>
  <p class="meta">The score adds points for junior/medior wording, skills from your profile, pay (stated &gt; typical &gt; assumed), company and freshness. Rules are in <a href="{{ url_for('settings_page', section='matching') }}">Settings</a>.</p></div>
-<div class="card"><h3 style="margin-top:0">Cover letter draft</h3>
- <textarea id="letter">{{ letter }}</textarea>
- <div class="row" style="margin-top:8px"><button onclick="copyText('letter',this)">Copy letter</button>
- <span class="meta">Built from your <a href="{{ url_for('settings_page', section='profile') }}">profile & template</a>. Always read it through and personalise it before sending.</span></div></div>
+<div class="card"><h3 style="margin-top:0">Motivation letter draft</h3>
+ {% if not profile_ready %}<div class="flash info">This draft is only as personal as the material behind it. Add your <b>ambition</b> and a few <b>achievements</b> in
+  <a href="{{ url_for('settings_page', section='profile') }}">Settings → Profile</a> and every letter gets much more specific.</div>{% endif %}
+ <form method="get" class="row" style="margin-bottom:8px">
+  <label class="f"><span>Language</span><select name="lang" onchange="this.form.submit()"><option value="" {{ 'selected' if lang=='auto' }}>Automatic ({{ 'Dutch' if letter.language=='nl' else 'English' }})</option><option value="en" {{ 'selected' if lang=='en' }}>English</option><option value="nl" {{ 'selected' if lang=='nl' }}>Nederlands</option></select></label>
+  <a class="btn" href="{{ url_for('job_page', job_id=job.id, v=letter.seed + 1, lang=(lang if lang!='auto' else None)) }}" title="Same facts, different wording and a different pick of achievements">↻ Another angle</a>
+ </form>
+ <textarea id="letter" style="min-height:430px" oninput="document.getElementById('lw').textContent=this.value.trim().split(/\s+/).length">{{ letter.text }}</textarea>
+ <div class="row" style="margin-top:8px"><button class="primary" onclick="copyLetter(this)">Copy letter</button>
+  <button onclick="copyText('aiprompt',this)" title="A ready prompt with the job text and your facts: paste it into any AI chat (free) for a polished version">Copy prompt for an AI assistant</button>
+  <span class="meta"><span id="lw">{{ letter.words }}</span> words · {{ 'Dutch' if letter.language=='nl' else 'English' }}</span></div>
+ <textarea id="aiprompt" style="display:none">{{ ai_prompt }}</textarea>
+ <div class="flash info" style="margin-top:10px">⚠ <b>Replace the [bracketed] sentence</b> with one real sentence on why you want to work at <i>{{ job.company }}</i> (a product, project or team you read about).
+  That one sentence is what no template can write, and it matters most.</div>
+ <details style="margin-top:8px"><summary>What this letter picked up from the posting, and how to make it better</summary>
+  <ul>
+   <li><b>Quoted line:</b> {{ '“' + letter.used.fragment + '”' if letter.used.fragment else 'none found: the posting has no clear responsibility line (add one yourself)' }}</li>
+   <li><b>Your skills it names:</b> {{ letter.used.skills|join(', ') or 'none that you rated solid/core' }}</li>
+   <li><b>Domain:</b> {{ letter.used.domain or 'not clear from the posting' }}</li>
+   <li><b>Skill it asks for that you don't list:</b> {{ letter.used.gap or 'none found' }} {% if letter.used.gap %}(the letter says so honestly and says you would learn it){% endif %}</li>
+   <li><b>Achievements used:</b> {{ letter.used.achievements|join(', ') or 'none: add some in Settings → Profile' }}</li>
+  </ul>
+  <p class="meta">Letters are built from <i>your</i> facts: your own achievements, your ambition and a line from the posting, and they only claim skills that your achievements actually show.
+  Recruiters and screening software increasingly flag generic text; nothing can promise to pass them, but specifics and your own words are the strongest signal. So: fill the bracketed sentence, change a phrase or two
+  to sound like you, and use <b>↻ Another angle</b> or the AI prompt if you want other wordings.</p></details>
+</div>
 <div class="card"><h3 style="margin-top:0">Notes</h3>
  <textarea id="notes" style="min-height:80px" placeholder="Contact person, interview dates, questions… (saved automatically)" onblur="post('/api/job/{{ job.id }}/notes',{notes:this.value})">{{ job.notes }}</textarea></div>
 <div class="card"><h3 style="margin-top:0">Description</h3>

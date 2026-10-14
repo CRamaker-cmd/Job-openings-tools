@@ -26,6 +26,16 @@ Everything runs on this machine and costs nothing.</p>
 pay (stated +15, typical +15, assumed +10), a fresh posting (up to +10) and a low experience requirement (+5). Unknown pay at an unlisted company costs −10.
 Open any job to see exactly <i>why</i> it got its score.</p>
 
+<h3>How salaries are calculated</h3>
+<p>Postings quote pay in many ways, so everything is converted to a <b>yearly gross figure</b> before it is compared with your minimum:
+a <b>monthly</b> salary becomes <b>monthly × 12, plus {{ cfg.search.vacation_allowance_pct }}% holiday pay</b> (Dutch <i>vakantiegeld</i>, only for jobs in the Netherlands, and not when the posting says it is already included),
+a stated <b>bonus</b> or <b>13th month</b> is added (one-off sign-on or relocation money never is, and nothing is added when no bonus is stated),
+and other currencies are converted with the rates in Settings → Advanced. A figure with no period (for example "€4.500 – €6.000") is read as monthly. Hover over any pay label to see the exact calculation.</p>
+
+<h3>Several countries</h3>
+<p>Tick the countries to search in <a href="{{ url_for('settings_page', section='matching') }}">Settings → Matching</a> (now: {% for c in picked_countries %}{{ c.flag }} {{ c.name }}{{ ', ' if not loop.last }}{% endfor %}). With more than one, the Jobs page gets a <b>Country</b> filter.
+Each country can have its <b>own minimum salary, entered in its own currency</b> (e.g. £70,000 for the UK, CHF 120,000 for Switzerland), and pay is shown in each job's local currency. LinkedIn is searched once per country.</p>
+
 <h3>Pay: what the labels mean</h3>
 <p>Most postings don't state a salary, so the app works down this list until it finds something:</p>
 <table>
@@ -37,9 +47,15 @@ Open any job to see exactly <i>why</i> it got its score.</p>
 <tr><td><span class="tag">pay unknown</span></td><td>No data and not a Tier 1 company. Hidden by default (Pay → Everything shows them).</td></tr>
 </table>
 
+<h3>Motivation letters</h3>
+<p>Every job page has a letter draft built from <b>your own facts</b> (<a href="{{ url_for('settings_page', section='profile') }}">Settings → Profile</a>: your ambition and concrete achievements): it quotes a real line from the posting, uses the two achievements that match the job best,
+names only skills your achievements actually show, states honestly a skill the job wants that you don't have yet, ties your ambition to the role, and leaves <b>one [bracketed] sentence for you</b>: why <i>this</i> company.
+It is written in the posting's language (English or Dutch). <b>↻ Another angle</b> re-words it; <b>Copy prompt for an AI assistant</b> gives you a ready prompt to paste into any free AI chat for a polished version.
+No tool can promise to pass recruiters' or software's AI screening; specifics and your own words are the strongest signal, so always fill the bracketed sentence and adjust a phrase or two.</p>
+
 <h3>Applying</h3>
 <p>The app <b>does not submit applications for you</b>: forms differ per company, sit behind logins and captchas, and auto-submitting could send the wrong thing in your name.
-It makes applying fast instead: <b>Apply ↗</b> opens the company's own page; each job page has a ready cover-letter draft with a copy button, a notes box and
+It makes applying fast instead: <b>Apply ↗</b> opens the company's own page; each job page has a motivation-letter draft with a copy button, a notes box and
 status buttons; <a href="{{ url_for('profile') }}">My snippets</a> has one-click copy for your details. Statuses: <b>new → starred → applied → interview → rejected</b>, or <b>hidden</b> to dismiss.</p>
 
 <h3>Where the jobs come from</h3>

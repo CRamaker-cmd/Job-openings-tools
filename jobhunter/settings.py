@@ -20,13 +20,15 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
 
+from .countries import COUNTRIES
+
 
 # ---------------------------------------------------------------- spec
 @dataclass
 class Field:
     path: str                     # dotted path into the config, e.g. "search.min_salary"
     label: str
-    kind: str                     # text | textarea | int | float | bool | lines | regex_lines | choices | skills | benchmarks
+    kind: str                     # text | textarea | int | float | bool | lines | regex_lines | choices | select | skills | benchmarks | country_salaries | fx | achievements
     help: str = ""
     min: Optional[float] = None
     max: Optional[float] = None
@@ -34,6 +36,7 @@ class Field:
     choices: list = field(default_factory=list)   # [(value, label)] for kind == "choices"
     group: str = ""               # sub-heading shown above the field
     placeholder: str = ""
+    required: bool = False        # a "choices" field must have at least one box ticked
 
 
 @dataclass
@@ -45,9 +48,9 @@ class Section:
 
 
 SECTIONS: list[Section] = [
-    Section("profile", "Profile & cover letter",
-            "Your details are used to fill the cover-letter draft and the copy-paste snippets. "
-            "The skills list drives the match score: a job that mentions your skills ranks higher.",
+    Section("profile", "Profile & motivation letters",
+            "Your details fill the copy-paste snippets. The rest is the raw material for the motivation letter on every job page: "
+            "the more of your own facts it has, the more personal and specific each letter is. Skills also drive the match score.",
             [
                 Field("profile.name", "Full name", "text", group="About you"),
                 Field("profile.email", "Email", "text"),
@@ -55,25 +58,54 @@ SECTIONS: list[Section] = [
                 Field("profile.linkedin", "LinkedIn URL", "text"),
                 Field("profile.github", "GitHub URL", "text"),
                 Field("profile.location", "Location", "text", placeholder="Almere, Netherlands"),
-                Field("profile.years_experience", "Years of experience", "int", min=0, max=40,
-                      help="Used in the cover letter ({years})."),
-                Field("profile.pitch", "Short pitch", "textarea",
-                      help="2-3 sentences about your best work. Inserted into the cover letter as {pitch}.",
-                      group="Cover letter"),
-                Field("cover_letter", "Cover-letter template", "textarea",
-                      help="Placeholders: {company} {title} {years} {pitch} {skills_line} {name} {email} {phone} {linkedin}. "
-                           "The draft on each job page is built from this - always read it before sending."),
+                Field("profile.years_experience", "Years of experience", "int", min=0, max=40),
+                Field("profile.pitch", "Short pitch (for application forms)", "textarea",
+                      help="2-3 sentences, shown on the 'My snippets' page for forms that ask for a summary."),
+                Field("profile.job_title", "Your current job title", "text", group="Material for motivation letters",
+                      placeholder="Medior Software Engineer", help="Used as 'As a <title> at <employer>...'."),
+                Field("profile.employer", "Your current employer", "text"),
+                Field("profile.ambition", "Your ambition", "textarea",
+                      help="The heart of every letter: where you want to grow and what kind of work you want to do more of, in your own "
+                           "words (1-2 sentences, first person). Specific beats grand: 'I want to own the design of high-traffic "
+                           "payment services' says more than 'I want to grow'."),
+                Field("profile.ambition_nl", "Your ambition in Dutch (optional)", "textarea",
+                      help="Used when a letter is written in Dutch. Empty = the English text is used."),
+                Field("profile.achievements", "Concrete achievements", "achievements",
+                      help="One per line:  tags :: English sentence || Nederlandse zin  (the Dutch part is optional). "
+                           "Tags are the skills and topics involved, e.g.  API design, REST, C#, Azure :: I led the development of ... "
+                           "Each letter uses the two achievements that overlap most with the posting, in your own words, and only names "
+                           "skills that appear in their tags. Use real numbers and outcomes: they are what makes a letter specific."),
+                Field("profile.letter_language", "Letter language", "select",
+                      choices=[("auto", "Automatic: match the posting's language"), ("en", "Always English"), ("nl", "Always Dutch")]),
                 Field("profile.skills", "Skills and weights", "skills", group="Skills",
                       help="One per line as  Skill: weight  (weight 1 = nice to have, 2 = solid, 3 = your core stack). "
-                           "Matched against the job title and description."),
+                           "Matched against the job title and description. Letters only say you USE skills weighted 2 or 3."),
             ]),
-    Section("matching", "Matching: pay, experience, location",
+    Section("matching", "Matching: countries, pay, experience",
             "What counts as a job worth showing. Jobs that fail these rules are not saved at all.",
             [
+                Field("search.countries", "Countries to search", "choices", required=True,
+                      choices=[(c.code, f"{c.flag} {c.name}") for c in COUNTRIES.values()], group="Where",
+                      help="Tick one or more. Every source searches all ticked countries (LinkedIn once per country), and the "
+                           "Jobs page gets a country filter. More countries = more requests = a slower refresh. "
+                           "Company feeds are filtered by each job's location; 'Any other site' (browser) entries use the "
+                           "country in their own address, so add one per country."),
+                Field("search.include_remote", "Include remote jobs", "bool",
+                      help="Off = only jobs located in the ticked countries. On = also keep jobs whose location says 'Remote' "
+                           "(from any country)."),
+                Field("search.country_keywords", "Extra place words (optional)", "lines",
+                      help="One per line. Extra words that also count as 'in one of my countries', e.g. a small town. "
+                           "The main cities and names of every country are already built in."),
                 Field("search.min_salary", "Minimum salary", "int", min=0, max=500000, unit="€ / year",
                       help="Postings that STATE a salary below this are dropped. When no salary is stated, the pay "
-                           "is estimated instead (see 'Pay lookups'). Jobs at big companies may go lower, see next.",
+                           "is estimated instead (see 'Pay lookups'). Jobs at big companies may go lower, see next. "
+                           "Monthly salaries are converted to yearly first (see 'How salaries are calculated').",
                       group="Pay"),
+                Field("search.min_salary_by_country", "Different minimum per country", "country_salaries",
+                      help="Optional. One per line as  DE: 80000  or  GB: 70000 : the yearly amount in THAT COUNTRY'S OWN CURRENCY "
+                           "(shown below your ticked countries). Countries without a line use the general minimum above, "
+                           "converted to their currency. Postings in any currency are converted with the exchange rates in "
+                           "Settings → Advanced before they are compared."),
                 Field("search.big_company_min_salary", "Lower minimum for big companies", "int", min=0, max=500000,
                       unit="€ / year",
                       help="For companies you marked as 'big' (below), this lower minimum applies instead, for any job "
@@ -83,6 +115,20 @@ SECTIONS: list[Section] = [
                                (2, "Tier 2: decent, but check the range")],
                       help="A company's tier is set on the Companies page. LinkedIn jobs from companies "
                            "you haven't added there are never treated as big."),
+                Field("search.big_company_min_by_country", "Big-company minimum per country", "country_salaries",
+                      help="Optional, same format (country's own currency). Without a line, the big-company minimum above is "
+                           "scaled in proportion to that country's minimum."),
+                Field("search.show_unknown_pay", "Show jobs whose pay I couldn't find", "bool",
+                      help="Most postings state no salary and a web search doesn't always find one. On (recommended): such jobs are "
+                           "listed, marked 'pay unknown' and ranked a little lower, because your minimum only applies when a "
+                           "salary is known. Off: they are hidden until a pay estimate is found."),
+                Field("search.vacation_allowance_pct", "Holiday pay added to monthly salaries", "int", min=0, max=20, unit="%",
+                      group="How salaries are calculated",
+                      help="Monthly gross x 12, plus this holiday allowance (Dutch vakantiegeld is 8 %), unless the posting says "
+                           "it is already included. Set 0 to turn off."),
+                Field("search.add_bonus", "Add stated bonuses", "bool",
+                      help="Adds a bonus the posting actually states (e.g. '10% bonus', 'bonus of €5.000', '13th month'). "
+                           "One-off sign-on or relocation money is never added, and nothing is added when no bonus is stated."),
                 Field("search.max_years_required", "Maximum years of experience asked", "int", min=0, max=20,
                       unit="years", group="Experience",
                       help="Postings that ask for more years of experience than this are dropped. "
@@ -92,20 +138,15 @@ SECTIONS: list[Section] = [
                       help="Companies re-open the same role for a new batch. A posting with the same title and company that "
                            "appears more than this many days after the one already saved counts as a NEW opening and is "
                            "checked again. A new posting ID always counts as new. Older postings are never re-fetched."),
-                Field("search.include_remote", "Include remote jobs", "bool", group="Location",
-                      help="Off = only jobs located in the Netherlands. On = also keep jobs whose location says 'Remote' "
-                           "(from any country)."),
-                Field("search.country_keywords", "Words that mean 'in the Netherlands'", "lines",
-                      help="One per line. A job's location must contain one of these words."),
             ]),
     Section("linkedin", "LinkedIn search",
             "LinkedIn's public (logged-out) job search, used to find jobs at companies that aren't on your Companies "
-            "list. It never uses your LinkedIn account. LinkedIn's terms forbid scraping, so keep volume low.",
+            "list. It searches each country ticked in Settings → Matching separately. It never uses your LinkedIn account. "
+            "LinkedIn's terms forbid scraping, so keep volume low.",
             [
                 Field("linkedin.enabled", "Search LinkedIn", "bool"),
                 Field("linkedin.queries", "Search terms", "lines",
                       help="One per line. Each is searched separately, so more terms = more requests = slower."),
-                Field("linkedin.location", "Location", "text"),
                 Field("linkedin.experience_levels", "LinkedIn experience levels", "choices",
                       choices=[(1, "Internship"), (2, "Entry level"), (3, "Associate"), (4, "Mid-Senior level"),
                                (5, "Director")]),
@@ -159,6 +200,9 @@ SECTIONS: list[Section] = [
                       help="Senior, staff, principal, lead, architect, 'Engineer III', ..."),
                 Field("search.title_junior_markers", "Title marks a junior role", "regex_lines"),
                 Field("search.title_medior_markers", "Title marks a medior role", "regex_lines"),
+                Field("search.fx_to_eur", "Exchange rates to euro", "fx", group="Other currencies",
+                      help="Salaries in other currencies are converted with these rates so they can be compared with your minimum. "
+                           "One per line as  GBP: 1.15  (1 unit of that currency in euro). Approximate is fine."),
                 Field("browser.executable", "Browser program (optional)", "text", group="Browser scraping",
                       help="Path to Chromium, e.g. /usr/bin/chromium on a Raspberry Pi. Empty = Playwright's own download."),
                 Field("browser.delay_seconds", "Pause between page loads", "float", min=0, max=30, unit="seconds"),
@@ -194,6 +238,10 @@ def to_text(f: Field, value) -> str:
         return "\n".join(str(v) for v in value)
     if f.kind == "skills":
         return "\n".join(f"{k}: {v}" for k, v in value.items())
+    if f.kind == "achievements":
+        return "\n".join(", ".join(a.get("tags", [])) + " :: " + a.get("en", "") + (" || " + a["nl"] if a.get("nl") else "") for a in value)
+    if f.kind in ("country_salaries", "fx"):
+        return "\n".join(f"{k}: {v}" for k, v in value.items())
     if f.kind == "benchmarks":
         return "\n".join(f"{c} | {lvl} | {lo} | {hi}" for c, d in value.items()
                          for lvl, (lo, hi) in d.items() if lvl in ("junior", "medior"))
@@ -222,11 +270,72 @@ def parse(f: Field, form) -> Any:
                     re.compile(pat)
             return items
         if k == "choices":
-            valid = {c for c, _ in f.choices}
-            vals = sorted({int(x) for x in form.getlist(f.path)})
-            if not set(vals) <= valid:
+            by_text = {str(c): c for c, _ in f.choices}             # values may be ints (levels, tiers) or strings (countries)
+            got = form.getlist(f.path)
+            if any(x not in by_text for x in got):
                 raise ValueError("unknown choice")
+            vals = [by_text[x] for x in by_text if x in got]       # keep the order of the list shown
+            if f.required and not vals:
+                raise ValueError("tick at least one")
             return vals
+        if k == "select":
+            if raw not in {c for c, _ in f.choices}:
+                raise ValueError("unknown choice")
+            return raw
+        if k == "achievements":
+            out_a: list[dict] = []
+            for line in raw.splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                tags, sep, rest = line.partition("::")
+                en, _, nl = rest.partition("||")
+                tag_list = [t.strip() for t in tags.split(",") if t.strip()]
+                if not sep or not tag_list or not en.strip():
+                    raise ValueError(f"'{line[:60]}...': write  tags, comma separated :: the sentence  (optionally  || Dutch sentence)")
+                item = {"tags": tag_list, "en": en.strip()}
+                if nl.strip():
+                    item["nl"] = nl.strip()
+                out_a.append(item)
+            return out_a
+        if k == "country_salaries":
+            out_c: dict[str, int] = {}
+            for line in raw.splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                code, sep, rest = line.partition(":")
+                code = code.strip().upper()
+                if not sep or code not in COUNTRIES:
+                    raise ValueError(f"'{line}': start with a country code from the list, e.g.  DE: 80000")
+                want = COUNTRIES[code].currency
+                m = re.fullmatch(r"\s*([€£]|[A-Za-z]{3})?\s*([\d][\d .,_']*)\s*([A-Za-z]{3})?\s*", rest)
+                if not m:
+                    raise ValueError(f"'{line}': write the yearly amount, e.g.  {code}: 80000")
+                given = {"€": "EUR", "£": "GBP"}.get(m.group(1) or "", (m.group(1) or m.group(3) or want).upper())
+                if given != want:
+                    raise ValueError(f"'{line}': {code} uses {want}, not {given}")
+                amount = re.sub(r"[ .,_']", "", m.group(2))
+                if not amount.isdigit() or not 1_000 <= int(amount) <= 100_000_000:
+                    raise ValueError(f"'{line}': that amount doesn't look like a yearly salary in {want}")
+                out_c[code] = int(amount)
+            return out_c
+        if k == "fx":
+            out_f: dict[str, float] = {}
+            for line in raw.splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                cur, sep, rate = line.partition(":")
+                cur = cur.strip().upper()
+                try:
+                    r = float(rate.strip().replace(",", "."))
+                except ValueError:
+                    r = 0.0
+                if not sep or not re.fullmatch(r"[A-Z]{3}", cur) or cur == "EUR" or not 0.0001 <= r <= 1000:
+                    raise ValueError(f"'{line}': write  GBP: 1.15")
+                out_f[cur] = r
+            return out_f
         if k == "skills":
             out: dict[str, int] = {}
             for line in raw.splitlines():

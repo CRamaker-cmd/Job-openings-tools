@@ -34,6 +34,7 @@
 <form class="filters" method="get">
 <input type="hidden" name="status" value="{{ f.status }}">
 <label class="f"><span>Search</span><input name="q" placeholder="title, company, skill…" value="{{ f.q }}"></label>
+{% if countries|length > 1 or country_counts|length > 1 %}<label class="f"><span>Country</span><select name="country"><option value="">All ({{ countries|length }})</option>{% for c in countries %}<option value="{{ c.code }}" {{ 'selected' if c.code==f.country }}>{{ c.flag }} {{ c.name }}{% if country_counts.get(c.code) %} ({{ country_counts[c.code] }}){% endif %}</option>{% endfor %}</select></label>{% endif %}
 <label class="f"><span>Company</span><select name="company"><option value="">All</option>{% for c in companies %}<option {{ 'selected' if c==f.company }}>{{ c }}</option>{% endfor %}</select></label>
 <label class="f"><span>Level</span><select name="level"><option value="">Any</option>{% for l in ['junior','medior','unspecified'] %}<option {{ 'selected' if l==f.level }}>{{ l }}</option>{% endfor %}</select></label>
 <label class="f"><span>Pay</span><select name="pay"><option value="good" {{ 'selected' if f.pay=='good' }}>OK ({{ min_salary // 1000 }}k+ or big co)</option><option value="all" {{ 'selected' if f.pay=='all' }}>Everything</option></select></label>
@@ -46,7 +47,7 @@
  <div class="score {{ 'hi' if j.score>=75 else 'mid' if j.score>=60 }}" title="Match score {{ j.score }}/100">{{ j.score }}</div>
  <div>
   <a class="title" href="{{ url_for('job_page', job_id=j.id) }}">{{ j.title }}</a>
-  <div class="meta">{{ j.company }} · {{ j.location }}{% if j.posted_at %} · posted {{ j.posted_at[:10] }}{% endif %} · via {{ j.source }}</div>
+  <div class="meta">{% if countries|length > 1 %}<span class="tag" title="Country">{{ j.country|flag }}</span> {% endif %}{{ j.company }} · {{ j.location }}{% if j.posted_at %} · posted {{ j.posted_at[:10] }}{% endif %} · via {{ j.source }}</div>
   <div>
    {% set pc, pl, pt = j|pay %}<span class="tag {{ pc }}" title="{{ pt }}">{{ pl }}</span>
    <span class="tag">{{ j.level }}</span>

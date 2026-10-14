@@ -68,9 +68,9 @@ def cmd_export(args, cfg):
     db = DB(cfg["db_path"])
     rows = db.list_jobs(status=args.status, pay="all")
     w = csv.writer(sys.stdout)
-    w.writerow(["score", "status", "company", "title", "location", "level", "pay", "url"])
+    w.writerow(["score", "status", "company", "title", "country", "location", "level", "pay", "url"])
     for r in rows:
-        w.writerow([r["score"], r["status"], r["company"], r["title"], r["location"],
+        w.writerow([r["score"], r["status"], r["company"], r["title"], r["country"], r["location"],
                     r["level"], r["pay_confidence"], r["url"]])
 
 
