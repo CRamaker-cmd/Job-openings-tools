@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import csv
 import json
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from .countries import detect_country
 from .filters import Evaluation
@@ -62,6 +63,8 @@ CREATE TABLE IF NOT EXISTS runs (
 """
 
 STATUSES = ("new", "starred", "applied", "interview", "rejected", "hidden")
+# Columns the overview needs (everything except the long description and the notes).
+LIGHT_COLUMNS = "id, company, title, location, country, level, score, reasons, status, url, source, posted_at, first_seen, pay_confidence, salary_min, salary_max, est_min, est_max, pay_note, pay_source, active"
 SOURCE_PRIORITY = {"linkedin": 0}  # anything else (company site) wins when the same job appears twice
 
 
@@ -75,6 +78,7 @@ class DB:
         self.conn = sqlite3.connect(path, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA journal_mode=WAL")
+        self.conn.execute("PRAGMA synchronous=NORMAL")   # safe with WAL; far fewer disk syncs (kind to SD cards and HDDs)
         self.conn.executescript(SCHEMA)
         self._migrate()
 
@@ -267,21 +271,12 @@ class DB:
     def get(self, job_id: int) -> Optional[sqlite3.Row]:
         return self.conn.execute("SELECT * FROM jobs WHERE id=?", (job_id,)).fetchone()
 
-    def list_jobs(
-        self,
-        status: str = "open",
-        q: str = "",
-        company: str = "",
-        min_score: int = 0,
-        pay: str = "good",
-        level: str = "",
-        show_unknown: bool = True,
-        country: str = "",
-        countries: Optional[list] = None,
-        sort: str = "score",
-        include_inactive: bool = False,
-    ) -> list[sqlite3.Row]:
-        where, args = [], []  # type: list[str], list[Any]
+    @staticmethod
+    def _filters(status="open", q="", company="", min_score=0, pay="good", level="", show_unknown=True,
+                 country="", countries=None, include_inactive=False) -> tuple[str, list]:
+        """The WHERE clause (and its arguments) shared by ``list_jobs`` and ``count_jobs``."""
+        where: list[str] = []
+        args: list[Any] = []
         if not include_inactive:
             where.append("active=1")
         if status == "open":
@@ -310,17 +305,30 @@ class DB:
         elif countries:  # only the countries currently searched (+ jobs whose country is unknown, e.g. remote)
             where.append(f"(country IN ({','.join('?' * len(countries))}) OR country='' OR country IS NULL)")
             args += list(countries)
+        return (" WHERE " + " AND ".join(where)) if where else "", args
+
+    def list_jobs(self, sort: str = "score", light: bool = False, **filters) -> list[sqlite3.Row]:
+        """Jobs matching the filters (see ``_filters``), newest/best first, at most 1000. ``light`` leaves out the
+        long description text, which the overview doesn't show."""
         order = {
             "score": "score DESC, first_seen DESC",
             "new": "first_seen DESC",
             "posted": "COALESCE(posted_at, first_seen) DESC",
             "company": "company COLLATE NOCASE, score DESC",
         }.get(sort, "score DESC")
-        sql = "SELECT * FROM jobs"
-        if where:
-            sql += " WHERE " + " AND ".join(where)
-        sql += f" ORDER BY {order} LIMIT 1000"
-        return self.conn.execute(sql, args).fetchall()
+        where, args = self._filters(**filters)
+        return self.conn.execute(f"SELECT {LIGHT_COLUMNS if light else '*'} FROM jobs{where} ORDER BY {order} LIMIT 1000", args).fetchall()
+
+    def count_jobs(self, **filters) -> int:
+        where, args = self._filters(**filters)
+        return self.conn.execute(f"SELECT COUNT(*) FROM jobs{where}", args).fetchone()[0]
+
+    def export_csv(self, out, status: str = "open") -> None:
+        """Write the jobs of a status as CSV to a text stream (used by the dashboard download and the CLI)."""
+        w = csv.writer(out)
+        w.writerow(["score", "status", "company", "title", "country", "location", "level", "pay", "url"])
+        for r in self.list_jobs(status=status, pay="all"):
+            w.writerow([r["score"], r["status"], r["company"], r["title"], r["country"], r["location"], r["level"], r["pay_confidence"], r["url"]])
 
     def country_counts(self) -> dict[str, int]:
         return {r[0] or "": r[1] for r in self.conn.execute(

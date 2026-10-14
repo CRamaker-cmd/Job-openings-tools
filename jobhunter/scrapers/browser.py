@@ -22,6 +22,7 @@ Config example:
 """
 from __future__ import annotations
 
+import importlib.util
 import logging
 import re
 from typing import Iterator
@@ -69,11 +70,7 @@ class BrowserUnavailable(RuntimeError):
 
 
 def playwright_available() -> bool:
-    try:
-        import playwright.sync_api  # noqa: F401
-        return True
-    except ImportError:
-        return False
+    return importlib.util.find_spec("playwright") is not None      # cheap: doesn't import the package
 
 
 class Browser(Scraper):

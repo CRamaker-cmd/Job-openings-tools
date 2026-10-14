@@ -22,5 +22,7 @@ async function post(url, body){const r=await fetch(url,{method:'POST',headers:{'
 async function setStatus(id,status,el){if(await post('/api/job/'+id+'/status',{status})){const c=document.getElementById('job-'+id);
  if(c&&!document.body.dataset.detail){ if(status==='starred'){c.classList.add('starred')}else{c.remove()} } else location.reload()}}
 function copyLetter(btn){const t=document.getElementById('letter').value;if(/\[[^\]]+\]/.test(t)&&!confirm('The letter still has a [bracketed] sentence for you to fill in. Copy it anyway?'))return;copyText('letter',btn)}
-function copyText(id,btn){const t=document.getElementById(id);navigator.clipboard.writeText(t.value??t.textContent).then(()=>{const o=btn.textContent;btn.textContent='Copied ✓';setTimeout(()=>btn.textContent=o,1200)})}
+function copyPrompt(id,lang,btn){fetch("/api/job/"+id+"/prompt?lang="+lang).then(r=>r.json()).then(d=>copyValue(d.prompt,btn))}
+function copyText(id,btn){const t=document.getElementById(id);copyValue(t.value??t.textContent,btn)}
+function copyValue(text,btn){navigator.clipboard.writeText(text).then(()=>{const o=btn.textContent;btn.textContent='Copied ✓';setTimeout(()=>btn.textContent=o,1200)})}
 </script></body></html>

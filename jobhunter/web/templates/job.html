@@ -26,9 +26,8 @@
  </form>
  <textarea id="letter" style="min-height:430px" oninput="letterChanged()">{{ letter.text }}</textarea>
  <div class="row" style="margin-top:8px"><button class="primary" onclick="copyLetter(this)">Copy letter</button>
-  <button onclick="copyText('aiprompt',this)" title="A ready prompt with the job text and your facts: paste it into any AI chat (free) for a polished version">Copy prompt for an AI assistant</button>
+  <button onclick="copyPrompt({{ job.id }},'{{ letter.language }}',this)" title="A ready prompt with the job text and your facts: paste it into any AI chat (free) for a polished version">Copy prompt for an AI assistant</button>
   <span class="meta"><span id="lw">{{ letter.words }}</span> words · {{ 'Dutch' if letter.language=='nl' else 'English' }}</span></div>
- <textarea id="aiprompt" style="display:none">{{ ai_prompt }}</textarea>
  {% if ai_ready %}
  <div class="agentbox"><b>✨ AI agent</b> <span class="meta">({{ ai_model }})</span>
   <textarea id="agent-extra" rows="2" placeholder="Optional: tell the agent anything specific, e.g. why you like {{ job.company }}, what to emphasise, a detail to mention…"></textarea>

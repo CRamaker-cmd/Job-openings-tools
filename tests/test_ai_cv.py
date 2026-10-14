@@ -380,3 +380,13 @@ def test_unreachable_server_message_mentions_docker(monkeypatch):
     monkeypatch.setattr(ai.requests, "post", boom)
     with pytest.raises(ai.AIError, match="Docker"):
         ai.generate(oa_cfg(), JOB, "en")
+
+
+def test_prompt_endpoint_and_light_overview_rows(app_env):
+    cfg, db, c, jid, _ = app_env
+    page = c.get(f"/job/{jid}").get_data(as_text=True)
+    assert "aiprompt" not in page                                    # the prompt is built on demand, not embedded in every page
+    body = c.get(f"/api/job/{jid}/prompt?lang=en").get_json()["prompt"]
+    assert "Adyen" in body and len(body) > 500
+    assert "description" not in db.list_jobs(pay="all", light=True)[0].keys()
+    assert db.count_jobs(pay="all") == len(db.list_jobs(pay="all"))

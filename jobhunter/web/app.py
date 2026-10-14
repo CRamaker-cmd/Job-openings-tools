@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import csv
 import io
 import itertools
 import json
@@ -137,12 +136,12 @@ def create_app(cfg: dict, scheduler_enabled: bool = False) -> Flask:
         codes = [c.code for c in selected(cfg)]
         if f["country"] not in codes:
             f["country"] = ""
-        jobs = db.list_jobs(**f, show_unknown=su, countries=codes)
+        jobs = db.list_jobs(**f, show_unknown=su, countries=codes, light=True)
         steps = setup_steps()
         return render_template("index.html", jobs=jobs, f=f, companies=db.companies(),
                                counts=db.counts(), summary=db.summary(su), statuses=STATUSES,
                                steps=steps, setup_done=all(s[0] for s in steps),
-                               hidden_by_pay=len(db.list_jobs(**{**f, "pay": "all"}, show_unknown=su, countries=codes)) - len(jobs),
+                               hidden_by_pay=db.count_jobs(**{k: v for k, v in f.items() if k not in ("sort", "pay")}, pay="all", show_unknown=su, countries=codes) - len(jobs),
                                countries=[COUNTRIES[c] for c in codes], country_counts=db.country_counts())
 
     @app.get("/job/<int:job_id>")
@@ -153,9 +152,17 @@ def create_app(cfg: dict, scheduler_enabled: bool = False) -> Flask:
         lang = request.args.get("lang") if request.args.get("lang") in ("en", "nl") else None
         letter = letters.generate(cfg, dict(job), variant=request.args.get("v", type=int), language=lang)
         return render_template("job.html", job=job, letter=letter, lang=lang or "auto", p=cfg["profile"], statuses=STATUSES,
-                               ai_prompt=letters.build_prompt(cfg, dict(job), letter.language),
                                profile_ready=bool(cfg["profile"].get("achievements") and cfg["profile"].get("ambition")),
                                ai_ready=ai.ready(cfg), ai_model=ai.model_name(cfg), ai_host=ai.host_label(cfg), has_cv=bool(cfg["profile"].get("cv_text")))
+
+    @app.get("/api/job/<int:job_id>/prompt")
+    def api_prompt(job_id):
+        """The ready-made prompt for pasting into any AI chat (built on demand, not embedded in every job page)."""
+        job = db.get(job_id)
+        if job is None:
+            abort(404)
+        lang = request.args.get("lang") if request.args.get("lang") in ("en", "nl") else letters.detect_language(job["description"] or "")
+        return jsonify(prompt=letters.build_prompt(cfg, dict(job), lang))
 
     @app.post("/api/job/<int:job_id>/status")
     def api_status(job_id):
@@ -233,11 +240,7 @@ def create_app(cfg: dict, scheduler_enabled: bool = False) -> Flask:
     @app.get("/export.csv")
     def export():
         out = io.StringIO()
-        w = csv.writer(out)
-        w.writerow(["score", "status", "company", "title", "country", "location", "level", "pay", "url"])
-        for r in db.list_jobs(status=request.args.get("status", "open"), pay="all"):
-            w.writerow([r["score"], r["status"], r["company"], r["title"], r["country"], r["location"],
-                        r["level"], r["pay_confidence"], r["url"]])
+        db.export_csv(out, request.args.get("status", "open"))
         return Response(out.getvalue(), mimetype="text/csv",
                         headers={"Content-Disposition": "attachment; filename=jobs.csv"})
 
