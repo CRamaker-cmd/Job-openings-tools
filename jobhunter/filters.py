@@ -58,14 +58,6 @@ def title_level(title: str, cfg: dict) -> str:
     return "unspecified"
 
 
-# ---------------------------------------------------------------- salary
-
-def parse_salary(text: str, cfg: Optional[dict] = None) -> tuple[Optional[int], Optional[int]]:
-    """(low, high) yearly gross EUR found in free text, or (None, None). See pay.py for the rules."""
-    p = parse_pay(text, cfg)
-    return (p.lo, p.hi) if p else (None, None)
-
-
 # ---------------------------------------------------------------- experience
 
 _YEARS = re.compile(

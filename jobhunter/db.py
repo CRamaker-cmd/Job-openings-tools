@@ -4,7 +4,7 @@ import json
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Optional
 
 from .countries import detect_country
 from .filters import Evaluation

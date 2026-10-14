@@ -1,6 +1,5 @@
 """AI agent (Claude via the official SDK, mocked: no network) and CV upload."""
 import io
-import re
 import zipfile
 from types import SimpleNamespace
 

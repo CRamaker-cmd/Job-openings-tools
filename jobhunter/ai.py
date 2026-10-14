@@ -225,20 +225,20 @@ def _call_anthropic(cfg: dict, system: str, user: str) -> Reply:
                 raise
             msg = client.messages.create(**params)      # this account/model doesn't take the fallback option: plain request
     except anthropic.NotFoundError:
-        raise AIError(f"The model '{model}' was not found. Check the model name in Settings → AI agent.")
+        raise AIError(f"The model '{model}' was not found. Check the model name in Settings → AI agent.") from None
     except anthropic.AuthenticationError:
-        raise AIError("The API key was rejected. Check it in Settings → AI agent.")
+        raise AIError("The API key was rejected. Check it in Settings → AI agent.") from None
     except anthropic.PermissionDeniedError:
-        raise AIError("This API key is not allowed to use that model.")
+        raise AIError("This API key is not allowed to use that model.") from None
     except anthropic.BadRequestError as e:
-        raise AIError(f"The request was rejected: {getattr(e, 'message', 'bad request')[:200]}")
+        raise AIError(f"The request was rejected: {getattr(e, 'message', 'bad request')[:200]}") from None
     except anthropic.RateLimitError as e:
         wait = e.response.headers.get("retry-after", "") if getattr(e, "response", None) is not None else ""
-        raise AIError(f"Rate limited by the API. Try again in {wait} seconds." if wait.isdigit() else "Rate limited by the API. Try again in a minute.")
+        raise AIError(f"Rate limited by the API. Try again in {wait} seconds." if wait.isdigit() else "Rate limited by the API. Try again in a minute.") from None
     except anthropic.APIConnectionError:   # includes timeouts
-        raise AIError("Could not reach the API (network error or timeout). Check the internet connection and try again.")
+        raise AIError("Could not reach the API (network error or timeout). Check the internet connection and try again.") from None
     except anthropic.APIStatusError as e:
-        raise AIError(f"The API returned an error ({e.status_code}). Try again in a moment.")
+        raise AIError(f"The API returned an error ({e.status_code}). Try again in a moment.") from None
     usage = getattr(msg, "usage", None)
     return Reply(text="".join(b.text for b in msg.content if getattr(b, "type", "") == "text"), model=getattr(msg, "model", model),
                  request_id=getattr(msg, "_request_id", "") or "", input_tokens=getattr(usage, "input_tokens", 0) or 0,
@@ -250,10 +250,10 @@ def _post(url: str, headers: dict, body: dict, timeout: float) -> requests.Respo
     try:
         return requests.post(url, headers=headers, json=body, timeout=timeout)
     except requests.exceptions.Timeout:
-        raise AIError(f"{urlparse(url).netloc} took too long to answer. Raise the timeout in Settings → AI agent (local models can be slow).")
+        raise AIError(f"{urlparse(url).netloc} took too long to answer. Raise the timeout in Settings → AI agent (local models can be slow).") from None
     except requests.exceptions.RequestException:
         raise AIError(f"Could not reach {urlparse(url).netloc}. Check the URL and that the server is running"
-                      " (inside Docker, 'localhost' is the container itself: use the machine's address).")
+                      " (inside Docker, 'localhost' is the container itself: use the machine's address).") from None
 
 
 def _message_text(content) -> str:
@@ -293,7 +293,7 @@ def _call_openai(cfg: dict, system: str, user: str) -> Reply:
         choice = data["choices"][0]
         text = _message_text(choice["message"].get("content"))
     except (ValueError, KeyError, IndexError, TypeError, AttributeError):
-        raise AIError("The endpoint answered, but not in the OpenAI chat format. Check that the URL is its /v1 chat endpoint.")
+        raise AIError("The endpoint answered, but not in the OpenAI chat format. Check that the URL is its /v1 chat endpoint.") from None
     usage = data.get("usage") or {}
     finish = choice.get("finish_reason") or ""
     return Reply(text=text, model=str(data.get("model") or model_name(cfg)), request_id=str(data.get("id") or ""),

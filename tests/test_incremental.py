@@ -19,7 +19,7 @@ class Src(Scraper):
         self.src, self.items, self.detail_calls = source, items, []
 
     def fetch(self):
-        for ext, title, desc in self.items:
+        for ext, title, _desc in self.items:
             yield RawJob(source=self.src, origin=self.name, company="Adyen", title=title, url=f"http://{self.src}/{ext}",
                          location="Amsterdam, Netherlands", external_id=ext)
 

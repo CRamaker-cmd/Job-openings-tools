@@ -38,7 +38,7 @@ def _pdf(data: bytes) -> str:
     except CVError:
         raise
     except Exception as e:  # pypdf raises many kinds of errors on damaged files
-        raise CVError(f"Could not read this PDF ({type(e).__name__}). Try exporting it again, or paste your CV text below.")
+        raise CVError(f"Could not read this PDF ({type(e).__name__}). Try exporting it again, or paste your CV text below.") from None
 
 
 def _docx(data: bytes) -> str:
@@ -51,7 +51,7 @@ def _docx(data: bytes) -> str:
     except CVError:
         raise
     except (KeyError, zipfile.BadZipFile, ET.ParseError):
-        raise CVError("That file doesn't look like a Word (.docx) document.")
+        raise CVError("That file doesn't look like a Word (.docx) document.") from None
     paragraphs = []
     for p in root.iter(f"{_W}p"):
         parts = []

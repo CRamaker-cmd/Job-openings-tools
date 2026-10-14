@@ -3,7 +3,8 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from jobhunter.config import load_config
-from jobhunter.filters import evaluate, location_ok, parse_salary, title_ok, title_level, years_required
+from jobhunter.pay import parse_pay
+from jobhunter.filters import evaluate, location_ok, title_ok, title_level, years_required
 from jobhunter.models import RawJob, fingerprint
 
 
@@ -61,7 +62,8 @@ def test_location(cfg):
     ("no money talk here", (None, None)),
 ])
 def test_salary(text, expected):
-    assert parse_salary(text) == expected
+    p = parse_pay(text)
+    assert ((p.lo, p.hi) if p else (None, None)) == expected
 
 
 def test_years():

@@ -386,17 +386,16 @@ def parse(f: Field, form, current: Optional[dict] = None) -> Any:
                 out_b.setdefault(parts[0], {"basis": "total"})[parts[1]] = [lo, hi]
             return out_b
     except re.error as e:
-        raise ValueError(f"not a valid pattern ({e})")
+        raise ValueError(f"not a valid pattern ({e})") from None
     except ValueError as e:
         msg = str(e)
         if msg.startswith("invalid literal") or msg.startswith("could not convert"):
             msg = "must be a number"
-        raise ValueError(msg)
+        raise ValueError(msg) from None
     raise ValueError(f"unsupported field kind {k}")
 
 
 # ---------------------------------------------------------------- storage
-TABLE = "CREATE TABLE IF NOT EXISTS settings (path TEXT PRIMARY KEY, value TEXT NOT NULL)"
 
 
 def read_overrides(db_path: str) -> dict[str, Any]:

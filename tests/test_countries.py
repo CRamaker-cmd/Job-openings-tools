@@ -136,7 +136,7 @@ def test_linkedin_is_one_source_per_country_and_feeds_use_all_countries():
     assert [n for n in source_names(cfg) if n.startswith("LinkedIn")] == ["LinkedIn NL", "LinkedIn DE"]
     li = [s for s in build_scrapers(cfg) if s.name.startswith("LinkedIn")]
     assert [s.country.linkedin_location for s in li] == ["Netherlands", "Germany"]
-    from jobhunter.scrapers.custom import Amazon, Uber
+    from jobhunter.scrapers.custom import Amazon
     assert [c.iso3 for c in Amazon(cfg, {"name": "Amazon"}).countries()] == ["NLD", "DEU"]
 
 

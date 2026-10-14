@@ -16,7 +16,6 @@ from dataclasses import dataclass
 from typing import Optional
 
 from . import money
-from .money import DEFAULT_FX
 
 
 _CUR_RE = r"(?:€|eur(?:os?)?\b|£|gbp\b|chf\b|sek\b|dkk\b|nok\b|pln\b|zł)"
@@ -65,7 +64,6 @@ class Pay:
     period: str                # period as stated in the text: year | month
     currency: str              # as stated
     note: str                  # how the figure was computed, in plain words
-    assumed_period: bool = False
 
 
 def to_number(s: str) -> float:
@@ -206,18 +204,19 @@ def parse_pay(text: str, cfg: Optional[dict] = None, country: Optional[str] = No
                 notes.append("holiday pay already included")
             thirteenth = bool(_THIRTEENTH.search(text))
             if thirteenth and add_bonus:
-                lo_y += lo; hi_y += hi
+                lo_y, hi_y = lo_y + lo, hi_y + hi
                 notes.append("+13th month")
         else:
             base_lo, base_hi = lo, hi
             lo_y, hi_y = lo, hi
             if re.search(r"excl(?:usief|usive|\.)?\s*(?:\d+\s*%\s*)?(?:vakantie(?:geld|toeslag)|holiday)|\+\s*8\s*%\s*(?:vakantie|holiday)", text[max(0, start - 60): end + 120], re.I) and vac_pct:
-                lo_y *= 1 + vac_pct / 100; hi_y *= 1 + vac_pct / 100
+                lo_y, hi_y = lo_y * (1 + vac_pct / 100), hi_y * (1 + vac_pct / 100)
                 notes.append(f"stated yearly +{vac_pct:g}% holiday pay")
         if add_bonus:
             blo, bhi, bnote = _bonus(text, lo_y, hi_y, None, fx)
             if bnote:
-                lo_y += blo; hi_y += bhi; notes.append(bnote)
+                lo_y, hi_y = lo_y + blo, hi_y + bhi
+                notes.append(bnote)
         lo_e, hi_e = _eur(lo_y, cur, fx), _eur(hi_y, cur, fx)
         if cur != "EUR":
             notes.append(f"{cur}→EUR at ~{fx[cur]:g}")
@@ -231,7 +230,7 @@ def parse_pay(text: str, cfg: Optional[dict] = None, country: Optional[str] = No
         if assumed:
             note += " [no period given: read as monthly]"
         score = (2 if context else 0) + (1 if explicit else 0) + (1 if is_range else 0)
-        cands.append((score, int(hi_e), Pay(int(round(lo_e)), int(round(hi_e)), period, cur, note, assumed)))
+        cands.append((score, int(hi_e), Pay(int(round(lo_e)), int(round(hi_e)), period, cur, note)))
         taken.append((start, end))
 
     for m in _RANGE.finditer(text):
