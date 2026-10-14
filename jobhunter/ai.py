@@ -1,29 +1,53 @@
-"""Optional: let a Claude model (official Anthropic SDK) write a fully customised motivation letter.
+"""Optional: let an AI model write a fully customised motivation letter ("Agent Customize").
 
-Off unless you switch it on and give an API key in Settings -> AI agent. When you press "Agent Customize" on a job, ONE request is
-sent with everything the model needs: the posting, your profile, your achievements and your CV text. The prompt is written so that
-the answer is strictly the letter, and the reply is parsed defensively (the letter must be inside <letter> tags; anything outside
-them is thrown away), so no preamble or sign-off chatter ever lands in the letter field.
+Works with any provider you choose in Settings -> AI agent:
 
-The API key lives in the app's database (or in the JOBHUNTER_AI_API_KEY environment variable) and is never shown again or
-included in any page.
+* ``anthropic``: Claude through the official Anthropic SDK;
+* ``openai``: any endpoint that speaks the common OpenAI-style ``/chat/completions`` API, which covers OpenAI, Gemini, Mistral,
+  Groq, OpenRouter, and models you run yourself (Ollama, LM Studio, vLLM, llama.cpp ...). A key is optional for local models.
+
+When you press the button ONE request is sent with everything the model needs: the posting, your profile, achievements and CV text.
+The prompt is strict (the reply must be exactly one ``<letter>`` block) and the reply is parsed defensively (only what is inside the
+tags is kept), so no preamble or chatter ever reaches the letter box, whichever model answers.
+
+The API key lives in the app's database (or the JOBHUNTER_AI_API_KEY environment variable), is never shown again and never appears
+in a page or an error message.
 """
 from __future__ import annotations
 
 import os
 import re
 from dataclasses import dataclass
-from typing import Optional
+from typing import Callable
+from urllib.parse import urlparse
+
+import requests
 
 from . import letters
 
-DEFAULT_MODEL = "claude-opus-5-5"
+PROVIDERS = {
+    "anthropic": "Claude (Anthropic API)",
+    "openai": "OpenAI-compatible endpoint (OpenAI, Gemini, Mistral, OpenRouter, your own model, ...)",
+}
+DEFAULT_MODEL = {"anthropic": "claude-opus-5-5"}      # other providers have no sensible default: the user names the model
 FALLBACK_BETA = "server-side-fallback-2026-07-01"
+MAX_TOKENS = {"anthropic": 16000, "openai": 4000}
 MIN_LETTER_WORDS = 80
 
 
 class AIError(Exception):
     """A failure with a message that is safe and useful to show the user (never contains the API key)."""
+
+
+@dataclass
+class Reply:
+    """What a provider returned, in one shape."""
+    text: str
+    model: str
+    request_id: str = ""
+    input_tokens: int = 0
+    output_tokens: int = 0
+    stop: str = ""                # "end", "length" (cut off) or "refusal"
 
 
 @dataclass
@@ -37,17 +61,46 @@ class AIResult:
 
 
 # ---------------------------------------------------------------- configuration
+def _conf(cfg: dict) -> dict:
+    return cfg.get("ai") or {}
+
+
+def provider(cfg: dict) -> str:
+    p = _conf(cfg).get("provider")
+    return p if p in PROVIDERS else "anthropic"
+
+
 def api_key(cfg: dict) -> str:
-    return (os.environ.get("JOBHUNTER_AI_API_KEY") or os.environ.get("ANTHROPIC_API_KEY") or (cfg.get("ai") or {}).get("api_key") or "").strip()
+    key = os.environ.get("JOBHUNTER_AI_API_KEY") or _conf(cfg).get("api_key") or ""
+    if not key and provider(cfg) == "anthropic":
+        key = os.environ.get("ANTHROPIC_API_KEY", "")         # the Anthropic SDK's own convention
+    return key.strip()
 
 
-def key_from_environment() -> bool:
-    return bool(os.environ.get("JOBHUNTER_AI_API_KEY") or os.environ.get("ANTHROPIC_API_KEY"))
+def key_from_environment(cfg: dict) -> bool:
+    return bool(os.environ.get("JOBHUNTER_AI_API_KEY") or (provider(cfg) == "anthropic" and os.environ.get("ANTHROPIC_API_KEY")))
+
+
+def model_name(cfg: dict) -> str:
+    return (_conf(cfg).get("model") or "").strip() or DEFAULT_MODEL.get(provider(cfg), "")
+
+
+def host_label(cfg: dict) -> str:
+    """Where the request goes, for the 'what is sent' notes in the UI."""
+    if provider(cfg) == "anthropic":
+        return "Anthropic"
+    return urlparse(_conf(cfg).get("base_url") or "").netloc or "your AI endpoint"
 
 
 def ready(cfg: dict) -> bool:
-    """The 'Agent Customize' button is shown when the agent is switched on AND a key is available."""
-    return bool((cfg.get("ai") or {}).get("enabled") and api_key(cfg))
+    """The Agent Customize button is shown when the agent is switched on and can be reached:
+    Claude needs a key; an OpenAI-compatible endpoint needs a URL and a model (a key is optional: local models need none)."""
+    c = _conf(cfg)
+    if not c.get("enabled"):
+        return False
+    if provider(cfg) == "anthropic":
+        return bool(api_key(cfg))
+    return bool((c.get("base_url") or "").strip() and model_name(cfg))
 
 
 # ---------------------------------------------------------------- the prompt
@@ -61,11 +114,7 @@ OUTPUT CONTRACT (strict; your reply is parsed by software):
 - Inside the tags: only the letter itself, as plain paragraphs separated by one blank line."""
 
 FORBIDDEN = ", ".join(f'"{w}"' for w in letters.BANNED)
-
-
-def _skills_text(cfg: dict) -> str:
-    names = {3: "core", 2: "solid", 1: "nice to have"}
-    return ", ".join(f"{k} ({names.get(int(v), 'solid')})" for k, v in (cfg["profile"].get("skills") or {}).items()) or "(none listed)"
+_LEVELS = {3: "core", 2: "solid", 1: "nice to have"}
 
 
 def build_messages(cfg: dict, job: dict, language: str, extra: str = "") -> tuple[str, str]:
@@ -75,12 +124,12 @@ def build_messages(cfg: dict, job: dict, language: str, extra: str = "") -> tupl
     company = letters.clean_company(job.get("company", ""))
     salutation = f"Beste team van {company}," if language == "nl" else f"Dear {company} team,"
     signoff = "Met vriendelijke groet," if language == "nl" else "Kind regards,"
-    amb = (p.get("ambition_nl") if language == "nl" and p.get("ambition_nl") else p.get("ambition")) or "(not provided: keep this paragraph short and factual)"
-    ach = []
-    for a in p.get("achievements") or []:
-        txt = (a.get(language) or a.get("en") or "").strip()
-        if txt:
-            ach.append(f"- [{', '.join(a.get('tags', []))}] {txt}")
+    ambition = (p.get("ambition_nl") if language == "nl" and p.get("ambition_nl") else p.get("ambition")) \
+        or "(not provided: keep this paragraph short and factual)"
+    achievements = "\n".join(
+        f"- [{', '.join(a.get('tags', []))}] {text}"
+        for a in p.get("achievements") or [] if (text := (a.get(language) or a.get("en") or "").strip())) or "(none provided)"
+    skills = ", ".join(f"{k} ({_LEVELS.get(int(v), 'solid')})" for k, v in (p.get("skills") or {}).items()) or "(none listed)"
     role = " at ".join(x for x in (p.get("job_title"), p.get("employer")) if x) or "(not provided)"
     cv = (p.get("cv_text") or "").strip() or "(no CV text provided)"
     posting = (job.get("description") or "").strip() or "(the posting has no description: rely on the title and company only)"
@@ -107,10 +156,10 @@ Name: {p.get('name') or '(not provided)'}
 Location: {p.get('location') or '(not provided)'}
 Current role: {role}
 Years of experience: {p.get('years_experience') or '(not provided)'}
-Skills: {_skills_text(cfg)}
-Ambition: {amb}
+Skills: {skills}
+Ambition: {ambition}
 Achievements (tags in brackets):
-{chr(10).join(ach) or '(none provided)'}
+{achievements}
 
 === CV (full text) ===
 {cv}
@@ -131,45 +180,43 @@ Posting text:
 # ---------------------------------------------------------------- reading the reply
 _PREAMBLE = re.compile(r"^(?:here(?:'s| is| are)|sure|certainly|of course|okay|ok|below is|hier is|natuurlijk|zeker|prima)\b[^\n]*$", re.I)
 _POSTAMBLE = re.compile(r"^(?:let me know|i hope|feel free|if you(?:'d| would) like|please let|note:|laat (?:het )?(?:me )?weten|ik hoop|mocht je)\b.*$", re.I)
+_RULE = re.compile(r"[-*_=`]{3,}")
+_THINK = re.compile(r"<think(?:ing)?>.*?</think(?:ing)?>", re.S | re.I)      # reasoning models (DeepSeek-R1, Qwen, ...) show their thinking
+
+
+def _trim(lines: list[str], junk: re.Pattern, from_start: bool) -> list[str]:
+    idx = (lambda: 0) if from_start else (lambda: -1)
+    while lines and (not lines[idx()].strip() or junk.match(lines[idx()].strip()) or _RULE.fullmatch(lines[idx()].strip())):
+        lines.pop(idx())
+    return lines
 
 
 def extract_letter(reply: str) -> tuple[str, bool]:
     """-> (letter, tidied). The letter is whatever is inside <letter> tags; if the model ignored the format, strip the usual
     preamble / sign-off chatter and markdown instead (tidied=True)."""
+    reply = _THINK.sub("", reply)
     m = re.search(r"<letter>(.*?)</letter>", reply, re.S | re.I)
-    tidied = False
+    tidied = m is None
     if m:
         text = m.group(1)
     else:
-        tidied = True
-        m2 = re.search(r"<letter>(.*)", reply, re.S | re.I)         # opening tag but the closing one is missing
-        text = m2.group(1) if m2 else reply
-        lines = [l for l in text.splitlines()]
-        while lines and (not lines[0].strip() or _PREAMBLE.match(lines[0].strip()) or re.fullmatch(r"[-*_=`]{3,}", lines[0].strip())):
-            lines.pop(0)
-        while lines and (not lines[-1].strip() or _POSTAMBLE.match(lines[-1].strip()) or re.fullmatch(r"[-*_=`]{3,}", lines[-1].strip())):
-            lines.pop()
-        text = "\n".join(lines)
-    text = re.sub(r"```[a-z]*", "", text)
-    text = re.sub(r"\*\*|__", "", text)
-    text = re.sub(r"(?m)^#{1,6}\s+", "", text)
+        opened = re.search(r"<letter>(.*)", reply, re.S | re.I)         # opening tag present, closing one missing
+        lines = (opened.group(1) if opened else reply).splitlines()
+        text = "\n".join(_trim(_trim(lines, _PREAMBLE, True), _POSTAMBLE, False))
+    text = re.sub(r"```[a-z]*|\*\*|__|(?m:^#{1,6}\s+)", "", text)
     text = re.sub(r"\n{3,}", "\n\n", text).strip().strip('"“”').strip()
     if len(text.split()) < MIN_LETTER_WORDS:
         raise AIError("The agent's answer didn't look like a letter (too short). Try again, or add instructions in the box.")
     return text + "\n", tidied
 
 
-# ---------------------------------------------------------------- calling the model
-def generate(cfg: dict, job: dict, language: str, extra: str = "") -> AIResult:
-    key = api_key(cfg)
-    if not (cfg.get("ai") or {}).get("enabled") or not key:
-        raise AIError("The AI agent is not set up. Switch it on and add an API key in Settings → AI agent.")
+# ---------------------------------------------------------------- providers
+def _call_anthropic(cfg: dict, system: str, user: str) -> Reply:
     import anthropic  # imported only when used, so the app stays light when the agent is off
 
-    model = ((cfg.get("ai") or {}).get("model") or DEFAULT_MODEL).strip()
-    system, user = build_messages(cfg, job, language, extra)
-    client = anthropic.Anthropic(api_key=key, timeout=120.0, max_retries=2)
-    params = dict(model=model, max_tokens=16000, system=system, messages=[{"role": "user", "content": user}])
+    model = model_name(cfg)
+    client = anthropic.Anthropic(api_key=api_key(cfg), timeout=float(_conf(cfg).get("timeout_seconds") or 180), max_retries=2)
+    params = dict(model=model, max_tokens=MAX_TOKENS["anthropic"], system=system, messages=[{"role": "user", "content": user}])
     try:
         try:   # the model may decline some requests; the server can then retry on a fallback model (beta, default form)
             msg = client.beta.messages.create(**params, betas=[FALLBACK_BETA], extra_body={"fallbacks": "default"})
@@ -186,20 +233,86 @@ def generate(cfg: dict, job: dict, language: str, extra: str = "") -> AIResult:
     except anthropic.BadRequestError as e:
         raise AIError(f"The request was rejected: {getattr(e, 'message', 'bad request')[:200]}")
     except anthropic.RateLimitError as e:
-        wait = e.response.headers.get("retry-after", "a minute") if getattr(e, "response", None) is not None else "a minute"
-        raise AIError(f"Rate limited by the API. Try again in {wait} seconds." if str(wait).isdigit() else "Rate limited by the API. Try again in a minute.")
+        wait = e.response.headers.get("retry-after", "") if getattr(e, "response", None) is not None else ""
+        raise AIError(f"Rate limited by the API. Try again in {wait} seconds." if wait.isdigit() else "Rate limited by the API. Try again in a minute.")
     except anthropic.APIConnectionError:   # includes timeouts
         raise AIError("Could not reach the API (network error or timeout). Check the internet connection and try again.")
     except anthropic.APIStatusError as e:
         raise AIError(f"The API returned an error ({e.status_code}). Try again in a moment.")
-
-    if msg.stop_reason == "refusal":
-        raise AIError("The model declined to write this letter. Try rewording the extra instructions.")
-    if msg.stop_reason == "max_tokens":
-        raise AIError("The answer was cut off. Try again.")
-    reply = "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")
-    letter, tidied = extract_letter(reply)
     usage = getattr(msg, "usage", None)
-    return AIResult(letter=letter, model=getattr(msg, "model", model), request_id=getattr(msg, "_request_id", "") or "",
-                    input_tokens=getattr(usage, "input_tokens", 0) or 0, output_tokens=getattr(usage, "output_tokens", 0) or 0,
-                    tidied=tidied)
+    return Reply(text="".join(b.text for b in msg.content if getattr(b, "type", "") == "text"), model=getattr(msg, "model", model),
+                 request_id=getattr(msg, "_request_id", "") or "", input_tokens=getattr(usage, "input_tokens", 0) or 0,
+                 output_tokens=getattr(usage, "output_tokens", 0) or 0, stop="refusal" if msg.stop_reason == "refusal"
+                 else "length" if msg.stop_reason == "max_tokens" else "end")
+
+
+def _post(url: str, headers: dict, body: dict, timeout: float) -> requests.Response:
+    try:
+        return requests.post(url, headers=headers, json=body, timeout=timeout)
+    except requests.exceptions.Timeout:
+        raise AIError(f"{urlparse(url).netloc} took too long to answer. Raise the timeout in Settings → AI agent (local models can be slow).")
+    except requests.exceptions.RequestException:
+        raise AIError(f"Could not reach {urlparse(url).netloc}. Check the URL and that the server is running"
+                      " (inside Docker, 'localhost' is the container itself: use the machine's address).")
+
+
+def _message_text(content) -> str:
+    """The reply text as a string: servers return a plain string, or a list of {"type": "text", "text": ...} parts."""
+    if isinstance(content, list):
+        return "".join(part.get("text", "") for part in content if isinstance(part, dict))
+    return content or ""
+
+
+def _call_openai(cfg: dict, system: str, user: str) -> Reply:
+    c = _conf(cfg)
+    base = (c.get("base_url") or "").strip().rstrip("/")
+    url = base if base.endswith("/chat/completions") else base + "/chat/completions"
+    headers = {"Content-Type": "application/json", **({"Authorization": f"Bearer {api_key(cfg)}"} if api_key(cfg) else {})}
+    body = {"model": model_name(cfg), "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
+            "max_tokens": MAX_TOKENS["openai"]}
+    timeout = float(c.get("timeout_seconds") or 180)
+    r = _post(url, headers, body, timeout)
+    if r.status_code == 400 and "max_completion_tokens" in r.text:       # newer OpenAI models renamed the parameter
+        body["max_completion_tokens"] = body.pop("max_tokens")
+        r = _post(url, headers, body, timeout)
+    if r.status_code in (401, 403):
+        raise AIError("The endpoint rejected the API key. Check it in Settings → AI agent.")
+    if r.status_code == 404:
+        raise AIError(f"Not found: check the endpoint URL and the model name '{model_name(cfg)}' in Settings → AI agent.")
+    if r.status_code == 429:
+        raise AIError("Rate limited by the API. Try again in a minute.")
+    if r.status_code >= 400:
+        detail = ""
+        try:
+            detail = str((r.json().get("error") or {}).get("message", ""))[:200] if isinstance(r.json(), dict) else ""
+        except ValueError:
+            pass
+        raise AIError(f"The endpoint returned an error ({r.status_code}){': ' + detail if detail else ''}.")
+    try:
+        data = r.json()
+        choice = data["choices"][0]
+        text = _message_text(choice["message"].get("content"))
+    except (ValueError, KeyError, IndexError, TypeError, AttributeError):
+        raise AIError("The endpoint answered, but not in the OpenAI chat format. Check that the URL is its /v1 chat endpoint.")
+    usage = data.get("usage") or {}
+    finish = choice.get("finish_reason") or ""
+    return Reply(text=text, model=str(data.get("model") or model_name(cfg)), request_id=str(data.get("id") or ""),
+                 input_tokens=usage.get("prompt_tokens") or 0, output_tokens=usage.get("completion_tokens") or 0,
+                 stop="length" if finish == "length" else "refusal" if finish == "content_filter" else "end")
+
+
+_CALLERS: dict[str, Callable[[dict, str, str], Reply]] = {"anthropic": _call_anthropic, "openai": _call_openai}
+
+
+def generate(cfg: dict, job: dict, language: str, extra: str = "") -> AIResult:
+    if not ready(cfg):
+        raise AIError("The AI agent is not set up. Switch it on and complete the settings in Settings → AI agent.")
+    system, user = build_messages(cfg, job, language, extra)
+    reply = _CALLERS[provider(cfg)](cfg, system, user)
+    if reply.stop == "refusal":
+        raise AIError("The model declined to write this letter. Try rewording the extra instructions.")
+    if reply.stop == "length":
+        raise AIError("The answer was cut off. Try again, or use a model with a longer reply limit.")
+    letter, tidied = extract_letter(reply.text)
+    return AIResult(letter=letter, model=reply.model, request_id=reply.request_id, input_tokens=reply.input_tokens,
+                    output_tokens=reply.output_tokens, tidied=tidied)

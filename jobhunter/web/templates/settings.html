@@ -24,14 +24,14 @@
 <form method="post">
 {% for r in rows %}{% set f = r.f %}
  {% if f.group %}<h3 class="grp">{{ f.group }}</h3>{% endif %}
- <div class="field">
+ <div class="field" {% if f.show_if %}data-showif="{{ f.show_if[0] }}={{ f.show_if[1] }}"{% endif %}>
   <label for="{{ f.path }}"><b>{{ f.label }}</b>{% if r.modified %} <span class="tag new" title="Differs from the default">changed</span>{% endif %}</label>
   {% if f.kind == 'bool' %}<label class="chk"><input type="checkbox" id="{{ f.path }}" name="{{ f.path }}" {{ 'checked' if r.value }}> Yes</label>
   {% elif f.kind in ('int','float') %}<div class="num"><input id="{{ f.path }}" name="{{ f.path }}" value="{{ r.text }}" inputmode="decimal" size="10"> <span class="meta">{{ f.unit }}</span></div>
-  {% elif f.kind == 'text' %}<input id="{{ f.path }}" name="{{ f.path }}" value="{{ r.text }}" placeholder="{{ f.placeholder }}" style="width:100%">
+  {% elif f.kind in ('text', 'url') %}<input id="{{ f.path }}" name="{{ f.path }}" value="{{ r.text }}" placeholder="{{ f.placeholder }}" style="width:100%">
   {% elif f.kind == 'secret' %}<input type="password" id="{{ f.path }}" name="{{ f.path }}" value="" autocomplete="new-password" style="width:100%" placeholder="{{ '•••••••••••• a key is saved (leave empty to keep it)' if r.has_value else 'paste your API key' }}">
    {% if r.has_value %}<label class="chk"><input type="checkbox" name="{{ f.path }}__clear"> Remove the saved key</label>{% endif %}
-   {% if ai_env_key %}<div class="help">✅ A key is also available from the server's environment (JOBHUNTER_AI_API_KEY / ANTHROPIC_API_KEY); it is used first.</div>{% endif %}
+   {% if ai_env_key %}<div class="help">✅ A key is also available from the server's environment (JOBHUNTER_AI_API_KEY); it is used first.</div>{% endif %}
   {% elif f.kind == 'pay_table' %}
   <table class="paytable"><tr><th>Country</th><th>Minimum pay</th><th>Minimum for big companies</th></tr>
   {% for pr in pay_rows %}<tr class="payrow" data-code="{{ pr.c.code }}" {{ 'hidden' if not pr.ticked }}>
@@ -51,6 +51,10 @@
   {% if r.default_text and r.modified %}<div class="help">Default: {{ r.default_text }}{{ ' ' + f.unit if f.unit }}</div>{% endif %}
  </div>
 {% endfor %}
+<script>
+(function(){document.querySelectorAll('[data-showif]').forEach(el=>{const [path,val]=el.dataset.showif.split('=');const src=document.querySelector('[name="'+path+'"]');
+ if(!src)return;const sync=()=>{el.hidden=src.value!==val;el.querySelectorAll('input').forEach(i=>i.disabled=el.hidden)};src.addEventListener('change',sync);sync()})})();
+</script>
 <div class="row"><button class="primary">Save</button><a href="{{ url_for('settings_page', section=sec.id) }}">Discard changes</a></div>
 </form>
 {% if n_modified %}<form method="post" action="{{ url_for('settings_reset', section=sec.id) }}" onsubmit="return confirm('Reset every setting on this page to its default?')" style="margin-top:14px">

@@ -72,13 +72,16 @@ Most postings don't show a salary. For those, the app looks up what is typically
 
 ## AI agent (optional)
 
-Lets a Claude model write a fully customised motivation letter for a job: press <b>Agent Customize</b> on a job page and the letter box is filled with the result for you to check. <b>What is sent:</b> only when you press that button, the job posting, your profile, achievements and CV text go to Anthropic's API. Nothing is sent otherwise. <b>Cost:</b> pay-per-use on your own Anthropic account, typically a few cents per letter (check Anthropic's current pricing); set a spending limit on the key.
+Lets an AI model write a fully customised motivation letter for a job: press <b>Agent Customize</b> on a job page and the letter box is filled with the result for you to check. Works with Claude, with any OpenAI-compatible service, or with a model running on your own hardware (Ollama, LM Studio, llama.cpp, vLLM...). <b>What is sent:</b> only when you press that button, the job posting, your profile, achievements and CV text go to the endpoint you configure below. Nothing is sent otherwise. <b>Cost:</b> hosted services bill per use (typically a few cents per letter), so set a spending limit; a model on your own network is free.
 
 | Setting | Path | Default | What it does |
 |---|---|---|---|
-| Enable the AI agent | `ai.enabled` | `off` | Adds the Agent Customize button to every job page (needs an API key below). |
-| Anthropic API key | `ai.api_key` | *(empty)* | Create one in the Anthropic Console (console.anthropic.com). It is stored in this app's database on your own drive, never shown again and never included in any page. Prefer not to store it? Leave this empty and set the JOBHUNTER_AI_API_KEY environment variable instead (docker: in your .env file). Leave the box empty to keep the saved key. |
-| Model | `ai.model` | `claude-opus-5-5` | Default claude-opus-5-5 (most capable). Cheaper options exist, e.g. claude-sonnet-5-5; use any model id your key can access. |
+| Enable the AI agent | `ai.enabled` | `off` | Adds the Agent Customize button to every job page (needs the details below). |
+| Type of service | `ai.provider` | `anthropic` | Almost every other service and local model server speaks the OpenAI-compatible protocol. |
+| Server address | `ai.base_url` | *(empty)* | The address up to and including <code>/v1</code>; the app adds <code>/chat/completions</code>. Ollama: <code>http://host:11434/v1</code>. OpenAI: <code>https://api.openai.com/v1</code>. Inside Docker, <code>localhost</code> is the container itself: use the machine's LAN address instead. |
+| API key | `ai.api_key` | *(empty)* | Stored in this app's database on your own drive, never shown again and never included in any page. Optional for models on your own network. Prefer not to store it? Leave this empty and set the JOBHUNTER_AI_API_KEY environment variable instead (docker: in your .env file). Leave the box empty to keep the saved key. |
+| Model | `ai.model` | *(empty)* | Claude: leave empty for the most capable model, or e.g. <code>claude-sonnet-5-5</code> for cheaper. OpenAI-compatible: required, the model name as the server knows it (e.g. <code>llama3.1:8b</code>). |
+| Give up after | `ai.timeout_seconds` | `180` | Small models on a Raspberry Pi can be slow; raise this if letters time out. Unit: seconds. Allowed: 30-1800. |
 
 ## Schedule
 

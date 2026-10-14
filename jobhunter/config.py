@@ -90,8 +90,11 @@ DEFAULTS: dict[str, Any] = {
     },
     "ai": {
         "enabled": False,             # show the "Agent Customize" button on jobs
+        "provider": "anthropic",      # "anthropic" (Claude) or "openai" (any OpenAI-compatible endpoint, incl. local models)
+        "base_url": "",               # openai provider only, e.g. http://192.168.1.20:11434/v1
         "api_key": "",                # write-only in the UI; or set the JOBHUNTER_AI_API_KEY environment variable
-        "model": "claude-opus-5-5",
+        "model": "",                  # empty = the provider's default (Claude: claude-opus-5-5); required for "openai"
+        "timeout_seconds": 180,
     },
     "salary": {
         # Used only when a posting doesn't state pay.

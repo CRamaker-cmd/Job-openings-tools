@@ -296,3 +296,88 @@ def test_cv_upload_replace_download_and_remove(app_env):
     assert cfg["profile"]["cv_text"] == "My edited CV text for the agent"
     c.post("/profile/cv/remove")
     assert cfg["profile"]["cv_filename"] == "" and cfg["profile"]["cv_text"] == "" and c.get("/profile/cv/file").status_code == 404
+
+
+# ------------------------------------------------------------------ OpenAI-compatible endpoints (local models etc.)
+def oa_cfg(**over):
+    c = cfg_ai(provider="openai", base_url="http://10.0.0.5:11434/v1/", model="llama3.1:8b", api_key="")
+    c["ai"].update(over)
+    return c
+
+
+class FakeResponse:
+    def __init__(self, status=200, payload=None, text=""):
+        self.status_code, self._payload = status, payload
+        self.text = text or str(payload)
+
+    def json(self):
+        if self._payload is None:
+            raise ValueError("no json")
+        return self._payload
+
+
+def oa_ok(content=LETTER, finish="stop"):
+    return FakeResponse(200, {"id": "x1", "model": "llama3.1:8b", "choices": [{"message": {"content": content}, "finish_reason": finish}],
+                              "usage": {"prompt_tokens": 900, "completion_tokens": 300}})
+
+
+@pytest.fixture
+def posts(monkeypatch):
+    calls, queue = [], []
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        calls.append({"url": url, "headers": headers, "body": json, "timeout": timeout})
+        return queue.pop(0)
+
+    monkeypatch.setattr(ai.requests, "post", fake_post)
+    return SimpleNamespace(calls=calls, queue=queue)
+
+
+def test_openai_compatible_request_needs_no_key_and_builds_the_url(posts):
+    posts.queue.append(oa_ok("<think>hmm</think><letter>" + LETTER + "</letter>"))
+    cfg = oa_cfg()
+    assert ai.ready(cfg) and ai.host_label(cfg) == "10.0.0.5:11434"
+    res = ai.generate(cfg, JOB, "en")
+    call = posts.calls[0]
+    assert call["url"] == "http://10.0.0.5:11434/v1/chat/completions"
+    assert "Authorization" not in call["headers"] and call["body"]["model"] == "llama3.1:8b" and call["timeout"] == 180
+    assert res.letter.strip() == LETTER and res.input_tokens == 900
+
+
+def test_openai_key_is_sent_as_bearer_and_never_leaks(posts):
+    posts.queue.append(FakeResponse(401, {"error": {"message": "bad"}}))
+    with pytest.raises(ai.AIError) as e:
+        ai.generate(oa_cfg(api_key=KEY), JOB, "en")
+    assert posts.calls[0]["headers"]["Authorization"] == f"Bearer {KEY}" and KEY not in str(e.value)
+
+
+def test_openai_retries_with_max_completion_tokens(posts):
+    posts.queue += [FakeResponse(400, {"error": {}}, text="Unsupported parameter: 'max_tokens' ... use 'max_completion_tokens'"), oa_ok()]
+    ai.generate(oa_cfg(), JOB, "en")
+    assert "max_tokens" not in posts.calls[1]["body"] and posts.calls[1]["body"]["max_completion_tokens"] == ai.MAX_TOKENS["openai"]
+
+
+@pytest.mark.parametrize("resp,expect", [
+    (FakeResponse(404, text="nope"), "Not found"),
+    (FakeResponse(429, text="slow"), "Rate limited"),
+    (FakeResponse(500, {"error": {"message": "model crashed"}}), "model crashed"),
+    (FakeResponse(200, {"unexpected": True}), "OpenAI chat format"),
+    (oa_ok(finish="length"), "cut off"),
+    (oa_ok(finish="content_filter"), "declined"),
+])
+def test_openai_errors_become_clear_messages(posts, resp, expect):
+    posts.queue.append(resp)
+    with pytest.raises(ai.AIError, match=expect):
+        ai.generate(oa_cfg(), JOB, "en")
+
+
+def test_openai_needs_url_and_model_but_not_a_key():
+    assert not ai.ready(oa_cfg(base_url="")) and not ai.ready(oa_cfg(model="")) and ai.ready(oa_cfg())
+
+
+def test_unreachable_server_message_mentions_docker(monkeypatch):
+    def boom(*a, **k):
+        raise ai.requests.exceptions.ConnectionError("refused")
+    monkeypatch.setattr(ai.requests, "post", boom)
+    with pytest.raises(ai.AIError, match="Docker"):
+        ai.generate(oa_cfg(), JOB, "en")

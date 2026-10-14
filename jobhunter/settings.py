@@ -28,7 +28,7 @@ from .countries import COUNTRIES
 class Field:
     path: str                     # dotted path into the config, e.g. "search.min_salary"
     label: str
-    kind: str                     # secret | pay_table | text | textarea | int | float | bool | lines | regex_lines | choices | select | skills | benchmarks | fx | achievements
+    kind: str                     # secret | pay_table | url | text | textarea | int | float | bool | lines | regex_lines | choices | select | skills | benchmarks | fx | achievements
     help: str = ""
     min: Optional[float] = None
     max: Optional[float] = None
@@ -37,6 +37,7 @@ class Field:
     group: str = ""               # sub-heading shown above the field
     placeholder: str = ""
     required: bool = False        # a "choices" field must have at least one box ticked
+    show_if: tuple = ()           # (other field path, value): only show this field while that field has that value
 
 
 @dataclass
@@ -163,19 +164,30 @@ SECTIONS: list[Section] = [
                            "(yearly €, e.g.  Mollie | medior | 75000 | 95000 )."),
             ]),
     Section("ai", "AI agent (optional)",
-            "Lets a Claude model write a fully customised motivation letter for a job: press <b>Agent Customize</b> on a job page and the "
-            "letter box is filled with the result for you to check. <b>What is sent:</b> only when you press that button, the job posting, "
-            "your profile, achievements and CV text go to Anthropic's API. Nothing is sent otherwise. <b>Cost:</b> pay-per-use on your own "
-            "Anthropic account, typically a few cents per letter (check Anthropic's current pricing); set a spending limit on the key.",
+            "Lets an AI model write a fully customised motivation letter for a job: press <b>Agent Customize</b> on a job page and the "
+            "letter box is filled with the result for you to check. Works with Claude, with any OpenAI-compatible service, or with a model "
+            "running on your own hardware (Ollama, LM Studio, llama.cpp, vLLM...). <b>What is sent:</b> only when you press that button, the job "
+            "posting, your profile, achievements and CV text go to the endpoint you configure below. Nothing is sent otherwise. "
+            "<b>Cost:</b> hosted services bill per use (typically a few cents per letter), so set a spending limit; a model on your own network is free.",
             [
                 Field("ai.enabled", "Enable the AI agent", "bool",
-                      help="Adds the Agent Customize button to every job page (needs an API key below)."),
-                Field("ai.api_key", "Anthropic API key", "secret",
-                      help="Create one in the Anthropic Console (console.anthropic.com). It is stored in this app's database on your own "
-                           "drive, never shown again and never included in any page. Prefer not to store it? Leave this empty and set the "
+                      help="Adds the Agent Customize button to every job page (needs the details below)."),
+                Field("ai.provider", "Type of service", "select",
+                      choices=[("anthropic", "Claude (Anthropic API)"), ("openai", "OpenAI-compatible (OpenAI, OpenRouter, Ollama, LM Studio, vLLM...)")],
+                      help="Almost every other service and local model server speaks the OpenAI-compatible protocol."),
+                Field("ai.base_url", "Server address", "url", placeholder="http://192.168.1.20:11434/v1", show_if=("ai.provider", "openai"),
+                      help="The address up to and including <code>/v1</code>; the app adds <code>/chat/completions</code>. "
+                           "Ollama: <code>http://host:11434/v1</code>. OpenAI: <code>https://api.openai.com/v1</code>. "
+                           "Inside Docker, <code>localhost</code> is the container itself: use the machine's LAN address instead."),
+                Field("ai.api_key", "API key", "secret",
+                      help="Stored in this app's database on your own drive, never shown again and never included in any page. "
+                           "Optional for models on your own network. Prefer not to store it? Leave this empty and set the "
                            "JOBHUNTER_AI_API_KEY environment variable instead (docker: in your .env file). Leave the box empty to keep the saved key."),
-                Field("ai.model", "Model", "text", placeholder="claude-opus-5-5",
-                      help="Default claude-opus-5-5 (most capable). Cheaper options exist, e.g. claude-sonnet-5-5; use any model id your key can access."),
+                Field("ai.model", "Model", "text", placeholder="empty = default (Claude: claude-opus-5-5)",
+                      help="Claude: leave empty for the most capable model, or e.g. <code>claude-sonnet-5-5</code> for cheaper. "
+                           "OpenAI-compatible: required, the model name as the server knows it (e.g. <code>llama3.1:8b</code>)."),
+                Field("ai.timeout_seconds", "Give up after", "int", min=30, max=1800, unit="seconds",
+                      help="Small models on a Raspberry Pi can be slow; raise this if letters time out."),
             ]),
     Section("schedule", "Schedule",
             "How the app keeps jobs fresh by itself, quietly in the background. You can always press 'Scrape now' to refresh everything immediately.",
@@ -262,6 +274,11 @@ def parse(f: Field, form, current: Optional[dict] = None) -> Any:
     try:
         if k == "bool":
             return f.path in form
+        if k == "url":
+            url = raw.strip().rstrip("/")
+            if url and not re.match(r"https?://[^\s/]+", url):
+                raise ValueError("must start with http:// or https://")
+            return url
         if k in ("text", "textarea"):
             return raw.strip() if k == "text" else raw.replace("\r\n", "\n").strip()
         if k in ("int", "float"):

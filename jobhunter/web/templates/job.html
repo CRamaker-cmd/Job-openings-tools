@@ -35,7 +35,7 @@
   <div class="row"><button class="primary" id="agent-btn" onclick="agentCustomize({{ job.id }})">✨ Agent Customize</button>
    <button id="agent-undo" onclick="agentUndo()" hidden>↩ Back to the template draft</button>
    <span class="meta" id="agent-status"></span></div>
-  <div class="meta">Sends this posting, your profile, achievements{% if has_cv %} and CV text{% endif %} to Anthropic to write the letter; the result fills the box above for you to check.{% if not has_cv %} <a href="{{ url_for('settings_page', section='profile') }}">Upload your CV</a> for better results.{% endif %}</div>
+  <div class="meta">Sends this posting, your profile, achievements{% if has_cv %} and CV text{% endif %} to {{ ai_host }} to write the letter; the result fills the box above for you to check.{% if not has_cv %} <a href="{{ url_for('settings_page', section='profile') }}">Upload your CV</a> for better results.{% endif %}</div>
  </div>
  {% else %}
  <div class="meta" style="margin-top:8px">Want a fully customised letter? <a href="{{ url_for('settings_page', section='ai') }}">Connect an AI agent</a> (optional) and an <b>Agent Customize</b> button appears here.</div>

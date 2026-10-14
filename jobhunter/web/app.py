@@ -155,7 +155,7 @@ def create_app(cfg: dict, scheduler_enabled: bool = False) -> Flask:
         return render_template("job.html", job=job, letter=letter, lang=lang or "auto", p=cfg["profile"], statuses=STATUSES,
                                ai_prompt=letters.build_prompt(cfg, dict(job), letter.language),
                                profile_ready=bool(cfg["profile"].get("achievements") and cfg["profile"].get("ambition")),
-                               ai_ready=ai.ready(cfg), ai_model=cfg["ai"].get("model") or ai.DEFAULT_MODEL, has_cv=bool(cfg["profile"].get("cv_text")))
+                               ai_ready=ai.ready(cfg), ai_model=ai.model_name(cfg), ai_host=ai.host_label(cfg), has_cv=bool(cfg["profile"].get("cv_text")))
 
     @app.post("/api/job/<int:job_id>/status")
     def api_status(job_id):
@@ -300,7 +300,7 @@ def create_app(cfg: dict, scheduler_enabled: bool = False) -> Flask:
                              "symbol": money.sym(c.currency).strip()})
         return render_template("settings.html", sec=sec, rows=rows, sections=settings.SECTIONS,
                                n_modified=sum(r["modified"] for r in rows), picked=selected(cfg), pay_rows=pay_rows,
-                               ai_env_key=ai.key_from_environment(),
+                               ai_env_key=ai.key_from_environment(cfg),
                                cfg_profile=cfg["profile"])
 
     @app.post("/settings/<section>/reset")
