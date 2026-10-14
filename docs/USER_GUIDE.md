@@ -180,11 +180,13 @@ never used (a test checks this).
 
 - every source searches all ticked countries (LinkedIn once per country; company feeds are filtered by each job's location);
 - the Jobs page gets a **Country** filter and a flag on each job; jobs from a country you later untick are hidden, not deleted;
-- **minimum salary per country, in that country's own currency** (*Different minimum per country*, e.g. `GB: 70000`, `CH: CHF 120000`);
-  without a line the general minimum (EUR) applies, converted to the country's currency; the big-company minimum is scaled in
-  proportion unless you set one per country too;
+- the **Minimum pay** table gets **one row per ticked country the moment you tick it**, with two columns: *Minimum pay* and
+  *Minimum for big companies*, both **in that country's own currency** (€, £, CHF, SEK, ...). A new row is prefilled with your
+  existing minimum converted to that currency (e.g. €90k → about £78k), so you only adjust it. Unticking a country hides its row
+  but remembers the numbers;
 - pay in any currency is converted with the **exchange rates in Settings → Advanced** (approximate defaults) and shown in the job's own currency;
 - Dutch holiday pay (+8% on monthly salaries) is added **only** for jobs in the Netherlands;
+- jobs with an unknown country (e.g. "Remote") use the first ticked country's row;
 - "Any other site" (browser) entries use the country in their own address: add one per country; the bundled pay table is Netherlands data.
 
 More countries means more requests and a slower refresh, so tick only the ones you will actually apply in.
@@ -206,3 +208,32 @@ Everything is converted to a **yearly gross EUR-equivalent** before it is compar
 If a posting states no salary, a typical figure is looked up (reported-pay table, then a web search) and **retried on later runs**
 whenever lookup budget is available. Jobs whose pay is still unknown are **shown, marked "pay unknown"**
 (*Settings → Matching → "Show jobs whose pay I couldn't find"*, on by default), because your minimum only applies when a salary is known.
+
+## 12. Your CV
+
+*Settings → Profile → Your CV*: upload a **PDF** (text-based), **Word (.docx)**, **.txt** or **.md** file (max 5 MB). The original is kept on
+your own drive (next to the database) and its text is read and shown in an editable box: fix odd line breaks or remove anything you'd rather not
+share. Scanned, image-only PDFs can't be read: paste the text into the box instead. The CV text is used only by the AI agent (section 13).
+
+## 13. AI agent: "Agent Customize" (optional)
+
+*Settings → AI agent*: switch it on and add an **Anthropic API key**. Then every job page gets an **✨ Agent Customize** button next to the
+template letter. Press it and the app sends one request to the Claude API containing everything needed: the job posting, your profile,
+skills, ambition, achievements and your **CV text**, plus anything you typed in the optional *"tell the agent..."* box (for example why you like
+the company). The reply fills the letter box so you can check and edit it; **↩ Back to the template draft** restores the earlier text.
+
+How the answer is kept to the letter only:
+- the prompt is strict: the reply must be exactly one `<letter>` block with no greeting, explanation, markdown or notes, the length, structure
+  and language are fixed, and it may only use facts you provided (no invented employers, numbers or tools); a skill the job wants that you don't
+  have is stated honestly; stock phrases are forbidden;
+- the app only keeps what is inside the `<letter>` tags and throws everything else away; if the model ignored the format, the usual "Here is your
+  letter..." / "Let me know if..." lines and markdown are stripped, and an answer that doesn't look like a letter is rejected with a message.
+
+**Privacy and cost.** Nothing is sent unless you press the button, and then only to Anthropic's API. You pay per use on your own Anthropic account
+(typically a few cents per letter with the default model; check current pricing, and set a **spending limit** on the key). The default model is
+`claude-opus-5-5`; change it in the settings (for example `claude-sonnet-5-5` is cheaper).
+
+**Keeping the key safe.** The key is stored in the app's database on your drive, is **write-only** (never shown again or included in any page,
+leave the box empty to keep it, tick *Remove* to delete it) and never appears in error messages. To keep it out of the database entirely, set the
+`JOBHUNTER_AI_API_KEY` environment variable (Docker: put it in `.env`) and leave the box empty. Remember the dashboard has **no login**: anyone on
+your home network who can open it can press the button and use your credits, so keep it on a trusted network and never port-forward it.

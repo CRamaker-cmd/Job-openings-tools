@@ -34,15 +34,15 @@ and other currencies are converted with the rates in Settings → Advanced. A fi
 
 <h3>Several countries</h3>
 <p>Tick the countries to search in <a href="{{ url_for('settings_page', section='matching') }}">Settings → Matching</a> (now: {% for c in picked_countries %}{{ c.flag }} {{ c.name }}{{ ', ' if not loop.last }}{% endfor %}). With more than one, the Jobs page gets a <b>Country</b> filter.
-Each country can have its <b>own minimum salary, entered in its own currency</b> (e.g. £70,000 for the UK, CHF 120,000 for Switzerland), and pay is shown in each job's local currency. LinkedIn is searched once per country.</p>
+Each ticked country gets its <b>own row in the pay table</b> (minimum pay and minimum for big companies, <b>in that country's own currency</b>, e.g. £70,000 for the UK), prefilled with your current minimum converted, and pay is shown in each job's local currency. LinkedIn is searched once per country.</p>
 
 <h3>Pay: what the labels mean</h3>
 <p>Most postings don't state a salary, so the app works down this list until it finds something:</p>
 <table>
-<tr><td><span class="tag pay">€95k–120k</span></td><td><b>Stated</b> in the posting. If it's below your minimum (<b>€{{ cfg.search.min_salary }}</b>) the job is dropped, unless it's a big company (below).</td></tr>
+<tr><td><span class="tag pay">€95k–120k</span></td><td><b>Stated</b> in the posting. If it's below your minimum (<b>{{ min_label }}</b>) the job is dropped, unless it's a big company (below).</td></tr>
 <tr><td><span class="tag pay">≈ €105k–125k typical</span></td><td><b>Typical pay</b> for that company and level, from the built-in reported-pay table, otherwise from a quick web search of Glassdoor / Levels.fyi / Indeed snippets. Counts as fine when the <i>middle</i> of the range reaches your minimum. These figures are mostly <i>total</i> compensation (with bonus and stock) and self-reported, so base pay is lower.</td></tr>
-<tr><td><span class="tag growth">🌱 big co, under {{ cfg.search.min_salary // 1000 }}k</span></td><td><b>Big-company exception.</b> You said you'd accept a bit less at a company with career potential. Companies marked <b>Tier 1</b> may pay down to <b>€{{ cfg.search.big_company_min_salary }}</b> (any job title). Change this in <a href="{{ url_for('settings_page', section='matching') }}">Settings → Matching</a>.</td></tr>
-<tr><td><span class="tag pay">💰 likely {{ cfg.search.min_salary // 1000 }}k+ (assumed)</span></td><td>No data found, but it's a Tier 1 company, so it's assumed to pay well. A guess.</td></tr>
+<tr><td><span class="tag growth">🌱 big co, under {{ min_label }}</span></td><td><b>Big-company exception.</b> You said you'd accept a bit less at a company with career potential. Companies marked <b>Tier 1</b> may pay down to <b>{{ big_label }}</b> (any job title; each country has its own pair of numbers in Settings → Matching). Change this in <a href="{{ url_for('settings_page', section='matching') }}">Settings → Matching</a>.</td></tr>
+<tr><td><span class="tag pay">💰 likely {{ min_label }}+ (assumed)</span></td><td>No data found, but it's a Tier 1 company, so it's assumed to pay well. A guess.</td></tr>
 <tr><td><span class="tag bad">⚠ typically €50k–65k</span></td><td>Data says it pays too little. Hidden by default, not deleted.</td></tr>
 <tr><td><span class="tag">pay unknown</span></td><td>No data and not a Tier 1 company. Hidden by default (Pay → Everything shows them).</td></tr>
 </table>
@@ -52,6 +52,11 @@ Each country can have its <b>own minimum salary, entered in its own currency</b>
 names only skills your achievements actually show, states honestly a skill the job wants that you don't have yet, ties your ambition to the role, and leaves <b>one [bracketed] sentence for you</b>: why <i>this</i> company.
 It is written in the posting's language (English or Dutch). <b>↻ Another angle</b> re-words it; <b>Copy prompt for an AI assistant</b> gives you a ready prompt to paste into any free AI chat for a polished version.
 No tool can promise to pass recruiters' or software's AI screening; specifics and your own words are the strongest signal, so always fill the bracketed sentence and adjust a phrase or two.</p>
+
+<h3>AI agent and your CV (optional)</h3>
+<p>Upload your CV in <a href="{{ url_for('settings_page', section='profile') }}">Settings → Profile</a> (PDF, Word, txt or md; the text is read and stays editable), then switch on the agent in <a href="{{ url_for('settings_page', section='ai') }}">Settings → AI agent</a> with an Anthropic API key.
+Every job page then gets <b>✨ Agent Customize</b>: it sends the posting, your profile, achievements and CV (plus anything you type in the box) to the Claude API and puts <b>only the letter</b> in the letter box for you to check; the template draft is one click away.
+Nothing is sent unless you press the button. It costs a few cents per letter on your own account, so set a spending limit on the key. The key is write-only: it is never shown again.</p>
 
 <h3>Applying</h3>
 <p>The app <b>does not submit applications for you</b>: forms differ per company, sit behind logins and captchas, and auto-submitting could send the wrong thing in your name.

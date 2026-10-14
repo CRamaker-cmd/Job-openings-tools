@@ -9,15 +9,15 @@ import os
 import threading
 import time
 
-from flask import (Flask, Response, abort, flash, jsonify, redirect, render_template, request,
+from flask import (Flask, Response, send_file, abort, flash, jsonify, redirect, render_template, request,
                    url_for)
 
 from .. import companies as co
 from .. import scheduler, settings
 from ..config import load_base
 from .. import money
-from .. import letters
-from ..countries import COUNTRIES, currency_of, min_salary_for, selected
+from .. import ai, cv, letters
+from ..countries import COUNTRIES, currency_of, min_salary_for, pay_row, primary_country, selected, suggest_row
 from ..db import DB, STATUSES
 from ..runner import rescore, run_all, run_one
 from ..scrapers import REGISTRY, source_names
@@ -28,7 +28,8 @@ log = logging.getLogger(__name__)
 
 def create_app(cfg: dict, scheduler_enabled: bool = False) -> Flask:
     app = Flask(__name__)
-    app.secret_key = os.urandom(16)  # only signs the one-request "saved!" messages
+    app.secret_key = os.urandom(16)
+    app.config["MAX_CONTENT_LENGTH"] = cv.MAX_BYTES + 512 * 1024    # uploads are limited to the CV size  # only signs the one-request "saved!" messages
     db = DB(cfg["db_path"])
     lock = threading.Lock()
     state = {"running": False, "what": ""}
@@ -79,7 +80,7 @@ def create_app(cfg: dict, scheduler_enabled: bool = False) -> Flask:
         cur = currency_of(job["country"] or "")
         loc = lambda eur: money.to_local(eur, cur, cfg)
         rng = lambda lo, hi: money.rng(loc(lo), loc(hi), cur)
-        floor = money.fmt(loc(min_salary_for(cfg, job["country"]) if job["country"] else cfg["search"]["min_salary"]), cur)
+        floor = money.fmt(loc(min_salary_for(cfg, job["country"] or primary_country(cfg))), cur)
         conf = job["pay_confidence"]
         if conf == "stated":
             lo, hi = job["salary_min"] or job["salary_max"], job["salary_max"]
@@ -100,7 +101,10 @@ def create_app(cfg: dict, scheduler_enabled: bool = False) -> Flask:
 
     @app.context_processor
     def inject():
-        return {"running": state["running"], "running_what": state["what"], "min_salary": cfg["search"]["min_salary"]}
+        pc = primary_country(cfg)
+        cur = currency_of(pc)
+        return {"running": state["running"], "running_what": state["what"],
+                "min_label": money.fmt(pay_row(cfg, pc)["min"], cur), "big_label": money.fmt(pay_row(cfg, pc)["big"], cur)}
 
     def setup_steps():
         p = cfg["profile"]
@@ -150,7 +154,8 @@ def create_app(cfg: dict, scheduler_enabled: bool = False) -> Flask:
         letter = letters.generate(cfg, dict(job), variant=request.args.get("v", type=int), language=lang)
         return render_template("job.html", job=job, letter=letter, lang=lang or "auto", p=cfg["profile"], statuses=STATUSES,
                                ai_prompt=letters.build_prompt(cfg, dict(job), letter.language),
-                               profile_ready=bool(cfg["profile"].get("achievements") and cfg["profile"].get("ambition")))
+                               profile_ready=bool(cfg["profile"].get("achievements") and cfg["profile"].get("ambition")),
+                               ai_ready=ai.ready(cfg), ai_model=cfg["ai"].get("model") or ai.DEFAULT_MODEL, has_cv=bool(cfg["profile"].get("cv_text")))
 
     @app.post("/api/job/<int:job_id>/status")
     def api_status(job_id):
@@ -166,6 +171,35 @@ def create_app(cfg: dict, scheduler_enabled: bool = False) -> Flask:
             abort(404)
         db.delete_job(job_id)
         return jsonify(ok=True)
+
+    ai_lock = threading.Lock()
+
+    @app.post("/api/job/<int:job_id>/agent")
+    def api_agent(job_id):
+        """Ask the AI agent to write the letter for this job. Returns {ok, letter, model, tokens} or {ok: false, error}."""
+        job = db.get(job_id)
+        if job is None:
+            abort(404)
+        if not ai.ready(cfg):
+            return jsonify(ok=False, error="The AI agent is not set up. Switch it on and add an API key in Settings → AI agent."), 400
+        body = request.get_json(silent=True) or {}
+        lang = body.get("lang") if body.get("lang") in ("en", "nl") else None
+        language = lang or (cfg["profile"].get("letter_language") if cfg["profile"].get("letter_language") in ("en", "nl") else None) \
+            or letters.detect_language(job["description"] or "")
+        if not ai_lock.acquire(blocking=False):
+            return jsonify(ok=False, error="The agent is already writing a letter. Wait for it to finish."), 429
+        try:
+            res = ai.generate(cfg, dict(job), language, str(body.get("extra", ""))[:3000])
+        except ai.AIError as e:
+            return jsonify(ok=False, error=str(e)), 502
+        except Exception:
+            log.exception("AI agent failed")
+            return jsonify(ok=False, error="Something went wrong while contacting the agent. See the app log."), 500
+        finally:
+            ai_lock.release()
+        log.info("AI letter for job %s by %s (request %s, %s in / %s out tokens)", job_id, res.model, res.request_id, res.input_tokens, res.output_tokens)
+        return jsonify(ok=True, letter=res.letter, model=res.model, tidied=res.tidied,
+                       words=len(res.letter.split()), tokens={"in": res.input_tokens, "out": res.output_tokens})
 
     @app.post("/api/job/<int:job_id>/notes")
     def api_notes(job_id):
@@ -232,7 +266,7 @@ def create_app(cfg: dict, scheduler_enabled: bool = False) -> Flask:
             abort(404)
         form_values = None
         if request.method == "POST":
-            values, errors = settings.validate_section(sec, request.form)
+            values, errors = settings.validate_section(sec, request.form, cfg)
             if errors:
                 for e in errors:
                     flash(e, "err")
@@ -251,9 +285,23 @@ def create_app(cfg: dict, scheduler_enabled: bool = False) -> Flask:
                 "text": form_values[f.path] if form_values else settings.to_text(f, cur),
                 "default_text": settings.to_text(f, default) if f.kind in ("int", "float", "bool", "text") else "",
                 "modified": cur != default,
+                "has_value": bool(cur) if f.kind == "secret" else False,
             })
+        ticked = {c.code for c in selected(cfg)}
+        if form_values is not None:                       # a failed save: keep what was typed
+            ticked = set(request.form.getlist("search.countries"))
+        pay_rows = []
+        for c in COUNTRIES.values():
+            saved = (cfg["search"].get("pay_by_country") or {}).get(c.code)
+            row = saved or suggest_row(cfg, c.code)
+            if form_values is not None and request.form.get(f"pay.{c.code}.min"):
+                row = {"min": request.form.get(f"pay.{c.code}.min"), "big": request.form.get(f"pay.{c.code}.big", "")}
+            pay_rows.append({"c": c, "min": row["min"], "big": row["big"], "ticked": c.code in ticked,
+                             "symbol": money.sym(c.currency).strip()})
         return render_template("settings.html", sec=sec, rows=rows, sections=settings.SECTIONS,
-                               n_modified=sum(r["modified"] for r in rows), picked=selected(cfg))
+                               n_modified=sum(r["modified"] for r in rows), picked=selected(cfg), pay_rows=pay_rows,
+                               ai_env_key=ai.key_from_environment(),
+                               cfg_profile=cfg["profile"])
 
     @app.post("/settings/<section>/reset")
     def settings_reset(section):
@@ -263,6 +311,38 @@ def create_app(cfg: dict, scheduler_enabled: bool = False) -> Flask:
         settings.reset_paths(db, cfg, base_cfg(), settings.section_paths(sec))
         flash(f"'{sec.title}' reset to defaults.", "ok")
         return redirect(url_for("settings_page", section=section))
+
+    # ------------------------------------------------------------ CV upload
+    @app.post("/profile/cv")
+    def cv_upload():
+        f = request.files.get("cv")
+        if f is None or not f.filename:
+            flash("Choose a file first.", "err")
+            return redirect(url_for("settings_page", section="profile"))
+        data = f.read()
+        try:
+            text = cv.extract_text(f.filename, data)
+        except cv.CVError as e:
+            flash(str(e), "err")
+            return redirect(url_for("settings_page", section="profile"))
+        name = cv.save_file(cfg, f.filename, data)
+        settings.save_values(db, cfg, base_cfg(), {"profile.cv_text": text, "profile.cv_filename": f.filename[:120]})
+        flash(f"CV read: {len(text.split())} words from {name}. Check the text below and fix anything odd.", "ok")
+        return redirect(url_for("settings_page", section="profile"))
+
+    @app.post("/profile/cv/remove")
+    def cv_remove():
+        cv.remove_file(cfg)
+        settings.save_values(db, cfg, base_cfg(), {"profile.cv_text": "", "profile.cv_filename": ""})
+        flash("CV removed.", "ok")
+        return redirect(url_for("settings_page", section="profile"))
+
+    @app.get("/profile/cv/file")
+    def cv_file():
+        path = cv.stored_file(cfg)
+        if path is None:
+            abort(404)
+        return send_file(path, as_attachment=True, download_name=cfg["profile"].get("cv_filename") or path.name)
 
     # ------------------------------------------------------------ companies
     def save_companies(items: list) -> None:

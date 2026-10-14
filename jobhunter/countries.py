@@ -9,7 +9,7 @@ import re
 from dataclasses import dataclass
 from typing import Optional
 
-from .money import to_eur
+from .money import to_eur, to_local
 
 
 @dataclass(frozen=True)
@@ -98,28 +98,46 @@ def currency_of(code: str) -> str:
     return COUNTRIES[code].currency if code in COUNTRIES else "EUR"
 
 
+def primary_country(cfg: dict) -> str:
+    """The first searched country: its pay rules apply to jobs whose country is unknown (e.g. remote)."""
+    return selected(cfg)[0].code
+
+
+def _nice(x: float) -> int:
+    """Round a converted amount to something a person would type."""
+    step = 5000 if x >= 100_000 else 1000 if x >= 10_000 else 100
+    return int(round(x / step) * step)
+
+
+def _reference_row(cfg: dict) -> tuple[str, dict]:
+    rows = cfg["search"].get("pay_by_country") or {}
+    if not rows:
+        return "NL", {"min": 90000, "big": 70000}
+    code = "NL" if "NL" in rows else next(iter(rows))
+    return code, rows[code]
+
+
+def suggest_row(cfg: dict, code: str) -> dict:
+    """Pay row for a country that has none yet: the reference row converted into this country's currency."""
+    ref_code, ref = _reference_row(cfg)
+    conv = lambda v: _nice(to_local(to_eur(v, currency_of(ref_code), cfg), currency_of(code), cfg))
+    return {"min": conv(ref["min"]), "big": conv(ref["big"])}
+
+
+def pay_row(cfg: dict, code: str) -> dict:
+    """{"min": ..., "big": ...} in the country's own currency (the saved row, else a converted suggestion)."""
+    row = (cfg["search"].get("pay_by_country") or {}).get(code)
+    return {"min": row["min"], "big": row["big"]} if row else suggest_row(cfg, code)
+
+
 def min_salary_for(cfg: dict, code: str) -> int:
-    """Minimum yearly pay for jobs in this country, as a EUR-equivalent so it can be compared with any posting.
-    A per-country minimum is entered in that country's own currency; without one the general minimum (EUR) applies."""
-    s = cfg["search"]
-    by = s.get("min_salary_by_country") or {}
-    if code in by:
-        return round(to_eur(by[code], currency_of(code), cfg))
-    return int(s["min_salary"])
+    """Minimum yearly pay for jobs in this country as a EUR-equivalent, so it can be compared with a posting in any currency."""
+    return round(to_eur(pay_row(cfg, code)["min"], currency_of(code), cfg))
 
 
 def big_floor_for(cfg: dict, code: str) -> int:
-    """The lower minimum for big companies in this country (EUR-equivalent). An explicit per-country value (local
-    currency) wins; otherwise the general floor is scaled by how this country's minimum compares to the general one."""
-    s = cfg["search"]
-    own = min_salary_for(cfg, code)
-    by = s.get("big_company_min_by_country") or {}
-    if code in by:
-        floor = to_eur(by[code], currency_of(code), cfg)
-    else:
-        base = s["min_salary"] or 1
-        floor = s["big_company_min_salary"] * own / base
-    return round(min(floor, own))
+    """The lower minimum for big companies in this country (EUR-equivalent, never above the normal minimum)."""
+    return min(round(to_eur(pay_row(cfg, code)["big"], currency_of(code), cfg)), min_salary_for(cfg, code))
 
 
 def keywords_for(cfg: dict) -> list[str]:

@@ -28,7 +28,7 @@ from .countries import COUNTRIES
 class Field:
     path: str                     # dotted path into the config, e.g. "search.min_salary"
     label: str
-    kind: str                     # text | textarea | int | float | bool | lines | regex_lines | choices | select | skills | benchmarks | country_salaries | fx | achievements
+    kind: str                     # secret | pay_table | text | textarea | int | float | bool | lines | regex_lines | choices | select | skills | benchmarks | fx | achievements
     help: str = ""
     min: Optional[float] = None
     max: Optional[float] = None
@@ -77,6 +77,9 @@ SECTIONS: list[Section] = [
                            "skills that appear in their tags. Use real numbers and outcomes: they are what makes a letter specific."),
                 Field("profile.letter_language", "Letter language", "select",
                       choices=[("auto", "Automatic: match the posting's language"), ("en", "Always English"), ("nl", "Always Dutch")]),
+                Field("profile.cv_text", "CV text", "textarea", group="Your CV",
+                      help="Read from the file you upload above; edit it freely (fix odd line breaks, remove what you'd rather not share). "
+                           "It is sent to your AI agent only when you press 'Agent Customize' on a job, and never anywhere else."),
                 Field("profile.skills", "Skills and weights", "skills", group="Skills",
                       help="One per line as  Skill: weight  (weight 1 = nice to have, 2 = solid, 3 = your core stack). "
                            "Matched against the job title and description. Letters only say you USE skills weighted 2 or 3."),
@@ -96,28 +99,17 @@ SECTIONS: list[Section] = [
                 Field("search.country_keywords", "Extra place words (optional)", "lines",
                       help="One per line. Extra words that also count as 'in one of my countries', e.g. a small town. "
                            "The main cities and names of every country are already built in."),
-                Field("search.min_salary", "Minimum salary", "int", min=0, max=500000, unit="€ / year",
-                      help="Postings that STATE a salary below this are dropped. When no salary is stated, the pay "
-                           "is estimated instead (see 'Pay lookups'). Jobs at big companies may go lower, see next. "
-                           "Monthly salaries are converted to yearly first (see 'How salaries are calculated').",
-                      group="Pay"),
-                Field("search.min_salary_by_country", "Different minimum per country", "country_salaries",
-                      help="Optional. One per line as  DE: 80000  or  GB: 70000 : the yearly amount in THAT COUNTRY'S OWN CURRENCY "
-                           "(shown below your ticked countries). Countries without a line use the general minimum above, "
-                           "converted to their currency. Postings in any currency are converted with the exchange rates in "
-                           "Settings → Advanced before they are compared."),
-                Field("search.big_company_min_salary", "Lower minimum for big companies", "int", min=0, max=500000,
-                      unit="€ / year",
-                      help="For companies you marked as 'big' (below), this lower minimum applies instead, for any job "
-                           "title. Those jobs are shown with a 🌱 'under 90k' label. Set equal to the minimum to disable."),
+                Field("search.pay_by_country", "Minimum pay per country", "pay_table", group="Pay",
+                      help="One row per country you search, in that country's own currency, yearly gross. <b>Minimum</b>: postings that "
+                           "STATE less are dropped (when no salary is stated, pay is estimated instead, see 'Pay lookups'). "
+                           "<b>Big companies</b>: the lower minimum for companies you marked as 'big' on the Companies page: for them "
+                           "any job title may pay somewhat less, because of the career potential. Monthly salaries are converted to "
+                           "yearly first (see 'How salaries are calculated')."),
                 Field("search.big_company_tiers", "Which company tiers count as 'big'", "choices",
                       choices=[(1, "Tier 1: big / high-paying (Booking, Adyen, Amazon, ...)"),
                                (2, "Tier 2: decent, but check the range")],
                       help="A company's tier is set on the Companies page. LinkedIn jobs from companies "
-                           "you haven't added there are never treated as big."),
-                Field("search.big_company_min_by_country", "Big-company minimum per country", "country_salaries",
-                      help="Optional, same format (country's own currency). Without a line, the big-company minimum above is "
-                           "scaled in proportion to that country's minimum."),
+                           "you haven't added there are never treated as big. Untick all to turn the lower big-company minimum off."),
                 Field("search.show_unknown_pay", "Show jobs whose pay I couldn't find", "bool",
                       help="Most postings state no salary and a web search doesn't always find one. On (recommended): such jobs are "
                            "listed, marked 'pay unknown' and ranked a little lower, because your minimum only applies when a "
@@ -169,6 +161,21 @@ SECTIONS: list[Section] = [
                 Field("salary.benchmarks", "Your own pay data", "benchmarks",
                       help="Overrides everything else. One per line:  Company | junior or medior | low | high  "
                            "(yearly €, e.g.  Mollie | medior | 75000 | 95000 )."),
+            ]),
+    Section("ai", "AI agent (optional)",
+            "Lets a Claude model write a fully customised motivation letter for a job: press <b>Agent Customize</b> on a job page and the "
+            "letter box is filled with the result for you to check. <b>What is sent:</b> only when you press that button, the job posting, "
+            "your profile, achievements and CV text go to Anthropic's API. Nothing is sent otherwise. <b>Cost:</b> pay-per-use on your own "
+            "Anthropic account, typically a few cents per letter (check Anthropic's current pricing); set a spending limit on the key.",
+            [
+                Field("ai.enabled", "Enable the AI agent", "bool",
+                      help="Adds the Agent Customize button to every job page (needs an API key below)."),
+                Field("ai.api_key", "Anthropic API key", "secret",
+                      help="Create one in the Anthropic Console (console.anthropic.com). It is stored in this app's database on your own "
+                           "drive, never shown again and never included in any page. Prefer not to store it? Leave this empty and set the "
+                           "JOBHUNTER_AI_API_KEY environment variable instead (docker: in your .env file). Leave the box empty to keep the saved key."),
+                Field("ai.model", "Model", "text", placeholder="claude-opus-5-5",
+                      help="Default claude-opus-5-5 (most capable). Cheaper options exist, e.g. claude-sonnet-5-5; use any model id your key can access."),
             ]),
     Section("schedule", "Schedule",
             "How the app keeps jobs fresh by itself, quietly in the background. You can always press 'Scrape now' to refresh everything immediately.",
@@ -232,7 +239,7 @@ def set_path(cfg: dict, path: str, value) -> None:
 # ---------------------------------------------------------------- value <-> form text
 def to_text(f: Field, value) -> str:
     """Config value -> text shown in the form."""
-    if value is None:
+    if value is None or f.kind == "secret":
         return ""
     if f.kind in ("lines", "regex_lines"):
         return "\n".join(str(v) for v in value)
@@ -240,7 +247,7 @@ def to_text(f: Field, value) -> str:
         return "\n".join(f"{k}: {v}" for k, v in value.items())
     if f.kind == "achievements":
         return "\n".join(", ".join(a.get("tags", [])) + " :: " + a.get("en", "") + (" || " + a["nl"] if a.get("nl") else "") for a in value)
-    if f.kind in ("country_salaries", "fx"):
+    if f.kind == "fx":
         return "\n".join(f"{k}: {v}" for k, v in value.items())
     if f.kind == "benchmarks":
         return "\n".join(f"{c} | {lvl} | {lo} | {hi}" for c, d in value.items()
@@ -248,7 +255,7 @@ def to_text(f: Field, value) -> str:
     return str(value)
 
 
-def parse(f: Field, form) -> Any:
+def parse(f: Field, form, current: Optional[dict] = None) -> Any:
     """Form data -> config value. Raises ValueError with a human message."""
     raw = form.get(f.path, "")
     k = f.kind
@@ -278,6 +285,26 @@ def parse(f: Field, form) -> Any:
             if f.required and not vals:
                 raise ValueError("tick at least one")
             return vals
+        if k == "secret":
+            key = raw.strip()
+            if key and (re.search(r"\s", key) or not 10 <= len(key) <= 400):
+                raise ValueError("that doesn't look like an API key (no spaces, 10-400 characters)")
+            return key
+        if k == "pay_table":
+            existing = dict(settings_get(current, f.path) or {})
+            ticked = [c for c in form.getlist("search.countries") if c in COUNTRIES]
+            for code in ticked:
+                cur = COUNTRIES[code].currency
+                vals = {}
+                for key, label in (("min", "minimum"), ("big", "big-company minimum")):
+                    txt = re.sub(r"[ .,_'€£]", "", form.get(f"pay.{code}.{key}", ""))
+                    if not txt.isdigit() or not 1_000 <= int(txt) <= 100_000_000:
+                        raise ValueError(f"{COUNTRIES[code].name}: the {label} must be a yearly amount in {cur}")
+                    vals[key] = int(txt)
+                if vals["big"] > vals["min"]:
+                    raise ValueError(f"{COUNTRIES[code].name}: the big-company minimum can't be higher than the minimum")
+                existing[code] = vals
+            return existing
         if k == "select":
             if raw not in {c for c, _ in f.choices}:
                 raise ValueError("unknown choice")
@@ -298,28 +325,6 @@ def parse(f: Field, form) -> Any:
                     item["nl"] = nl.strip()
                 out_a.append(item)
             return out_a
-        if k == "country_salaries":
-            out_c: dict[str, int] = {}
-            for line in raw.splitlines():
-                line = line.strip()
-                if not line:
-                    continue
-                code, sep, rest = line.partition(":")
-                code = code.strip().upper()
-                if not sep or code not in COUNTRIES:
-                    raise ValueError(f"'{line}': start with a country code from the list, e.g.  DE: 80000")
-                want = COUNTRIES[code].currency
-                m = re.fullmatch(r"\s*([€£]|[A-Za-z]{3})?\s*([\d][\d .,_']*)\s*([A-Za-z]{3})?\s*", rest)
-                if not m:
-                    raise ValueError(f"'{line}': write the yearly amount, e.g.  {code}: 80000")
-                given = {"€": "EUR", "£": "GBP"}.get(m.group(1) or "", (m.group(1) or m.group(3) or want).upper())
-                if given != want:
-                    raise ValueError(f"'{line}': {code} uses {want}, not {given}")
-                amount = re.sub(r"[ .,_']", "", m.group(2))
-                if not amount.isdigit() or not 1_000 <= int(amount) <= 100_000_000:
-                    raise ValueError(f"'{line}': that amount doesn't look like a yearly salary in {want}")
-                out_c[code] = int(amount)
-            return out_c
         if k == "fx":
             out_f: dict[str, float] = {}
             for line in raw.splitlines():
@@ -397,11 +402,21 @@ def apply_overrides(cfg: dict, overrides: dict[str, Any]) -> None:
         set_path(cfg, path, value)
 
 
-def validate_section(section: Section, form) -> tuple[dict[str, Any], list[str]]:
+def settings_get(cfg: Optional[dict], path: str):
+    return get_path(cfg, path) if cfg else None
+
+
+def validate_section(section: Section, form, current: Optional[dict] = None) -> tuple[dict[str, Any], list[str]]:
     values, errors = {}, []
     for f in section.fields:
+        if f.kind == "secret":
+            if form.get(f.path + "__clear"):
+                values[f.path] = ""
+                continue
+            if not form.get(f.path, "").strip():
+                continue                                  # left empty: keep the saved key
         try:
-            values[f.path] = parse(f, form)
+            values[f.path] = parse(f, form, current)
         except ValueError as e:
             errors.append(f"{f.label}: {e}")
     return values, errors

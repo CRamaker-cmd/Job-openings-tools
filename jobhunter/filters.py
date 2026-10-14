@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from . import money
-from .countries import big_floor_for, currency_of, detect_country, in_selected_country, min_salary_for
+from .countries import big_floor_for, currency_of, detect_country, in_selected_country, min_salary_for, primary_country
 from .models import RawJob
 from .pay import parse_pay
 
@@ -148,10 +148,11 @@ def evaluate(job: RawJob, cfg: dict, now: Optional[datetime] = None, estimate=No
     tier = company_tier(job.company, cfg)
     # At big companies (career potential) a somewhat lower salary is acceptable: a lower floor applies.
     country = detect_country(job.location, cfg)
-    cur = currency_of(country) if country else "EUR"
-    min_sal = min_salary_for(cfg, country) if country else s["min_salary"]
+    pay_country = country or primary_country(cfg)           # unknown country (remote): the first searched country's rules
+    cur = currency_of(pay_country)
+    min_sal = min_salary_for(cfg, pay_country)
     big = tier in s["big_company_tiers"]
-    floor = (big_floor_for(cfg, country) if country else min(s["big_company_min_salary"], min_sal)) if big else min_sal
+    floor = big_floor_for(cfg, pay_country) if big else min_sal
     show = lambda lo, hi: money.rng(money.to_local(lo, cur, cfg), money.to_local(hi, cur, cfg), cur)   # in the country's currency
 
     sal_min, sal_max, pay_note = job.salary_min, job.salary_max, ""

@@ -24,6 +24,7 @@ Your details fill the copy-paste snippets. The rest is the raw material for the 
 | Your ambition in Dutch (optional) | `profile.ambition_nl` | `built-in text` | Used when a letter is written in Dutch. Empty = the English text is used. |
 | Concrete achievements | `profile.achievements` | `performance, scale, C#, SQL, Azure :: I drove a major per...` | One per line:  tags :: English sentence \|\| Nederlandse zin  (the Dutch part is optional). Tags are the skills and topics involved, e.g.  API design, REST, C#, Azure :: I led the development of ... Each letter uses the two achievements that overlap most with the posting, in your own words, and only names skills that appear in their tags. Use real numbers and outcomes: they are what makes a letter specific. |
 | Letter language | `profile.letter_language` | `auto` |  |
+| CV text | `profile.cv_text` | *(empty)* | Read from the file you upload above; edit it freely (fix odd line breaks, remove what you'd rather not share). It is sent to your AI agent only when you press 'Agent Customize' on a job, and never anywhere else. |
 | Skills and weights | `profile.skills` | `C#: 3, .NET: 3, ASP.NET: 2, Azure: 3, Python: 2, SQL: 2, ...` | One per line as  Skill: weight  (weight 1 = nice to have, 2 = solid, 3 = your core stack). Matched against the job title and description. Letters only say you USE skills weighted 2 or 3. |
 
 ## Matching: countries, pay, experience
@@ -35,11 +36,8 @@ What counts as a job worth showing. Jobs that fail these rules are not saved at 
 | Countries to search | `search.countries` | `['NL']` | Tick one or more. Every source searches all ticked countries (LinkedIn once per country), and the Jobs page gets a country filter. More countries = more requests = a slower refresh. Company feeds are filtered by each job's location; 'Any other site' (browser) entries use the country in their own address, so add one per country. |
 | Include remote jobs | `search.include_remote` | `off` | Off = only jobs located in the ticked countries. On = also keep jobs whose location says 'Remote' (from any country). |
 | Extra place words (optional) | `search.country_keywords` | *(empty)* | One per line. Extra words that also count as 'in one of my countries', e.g. a small town. The main cities and names of every country are already built in. |
-| Minimum salary | `search.min_salary` | `90000` | Postings that STATE a salary below this are dropped. When no salary is stated, the pay is estimated instead (see 'Pay lookups'). Jobs at big companies may go lower, see next. Monthly salaries are converted to yearly first (see 'How salaries are calculated'). Unit: € / year. Allowed: 0-500000. |
-| Different minimum per country | `search.min_salary_by_country` | *(empty)* | Optional. One per line as  DE: 80000  or  GB: 70000 : the yearly amount in THAT COUNTRY'S OWN CURRENCY (shown below your ticked countries). Countries without a line use the general minimum above, converted to their currency. Postings in any currency are converted with the exchange rates in Settings → Advanced before they are compared. |
-| Lower minimum for big companies | `search.big_company_min_salary` | `70000` | For companies you marked as 'big' (below), this lower minimum applies instead, for any job title. Those jobs are shown with a 🌱 'under 90k' label. Set equal to the minimum to disable. Unit: € / year. Allowed: 0-500000. |
-| Which company tiers count as 'big' | `search.big_company_tiers` | `[1]` | A company's tier is set on the Companies page. LinkedIn jobs from companies you haven't added there are never treated as big. |
-| Big-company minimum per country | `search.big_company_min_by_country` | *(empty)* | Optional, same format (country's own currency). Without a line, the big-company minimum above is scaled in proportion to that country's minimum. |
+| Minimum pay per country | `search.pay_by_country` | `{'NL': {'min': 90000, 'big': 70000}}` | One row per country you search, in that country's own currency, yearly gross. <b>Minimum</b>: postings that STATE less are dropped (when no salary is stated, pay is estimated instead, see 'Pay lookups'). <b>Big companies</b>: the lower minimum for companies you marked as 'big' on the Companies page: for them any job title may pay somewhat less, because of the career potential. Monthly salaries are converted to yearly first (see 'How salaries are calculated'). |
+| Which company tiers count as 'big' | `search.big_company_tiers` | `[1]` | A company's tier is set on the Companies page. LinkedIn jobs from companies you haven't added there are never treated as big. Untick all to turn the lower big-company minimum off. |
 | Show jobs whose pay I couldn't find | `search.show_unknown_pay` | `on` | Most postings state no salary and a web search doesn't always find one. On (recommended): such jobs are listed, marked 'pay unknown' and ranked a little lower, because your minimum only applies when a salary is known. Off: they are hidden until a pay estimate is found. |
 | Holiday pay added to monthly salaries | `search.vacation_allowance_pct` | `8` | Monthly gross x 12, plus this holiday allowance (Dutch vakantiegeld is 8 %), unless the posting says it is already included. Set 0 to turn off. Unit: %. Allowed: 0-20. |
 | Add stated bonuses | `search.add_bonus` | `on` | Adds a bonus the posting actually states (e.g. '10% bonus', 'bonus of €5.000', '13th month'). One-off sign-on or relocation money is never added, and nothing is added when no bonus is stated. |
@@ -71,6 +69,16 @@ Most postings don't show a salary. For those, the app looks up what is typically
 | Remember results for | `salary.cache_days` | `45` |  Unit: days. Allowed: 1-365. |
 | Pause between searches | `salary.delay_seconds` | `3.0` |  Unit: seconds. Allowed: 0-30. |
 | Your own pay data | `salary.benchmarks` | *(empty)* | Overrides everything else. One per line:  Company \| junior or medior \| low \| high  (yearly €, e.g.  Mollie \| medior \| 75000 \| 95000 ). |
+
+## AI agent (optional)
+
+Lets a Claude model write a fully customised motivation letter for a job: press <b>Agent Customize</b> on a job page and the letter box is filled with the result for you to check. <b>What is sent:</b> only when you press that button, the job posting, your profile, achievements and CV text go to Anthropic's API. Nothing is sent otherwise. <b>Cost:</b> pay-per-use on your own Anthropic account, typically a few cents per letter (check Anthropic's current pricing); set a spending limit on the key.
+
+| Setting | Path | Default | What it does |
+|---|---|---|---|
+| Enable the AI agent | `ai.enabled` | `off` | Adds the Agent Customize button to every job page (needs an API key below). |
+| Anthropic API key | `ai.api_key` | *(empty)* | Create one in the Anthropic Console (console.anthropic.com). It is stored in this app's database on your own drive, never shown again and never included in any page. Prefer not to store it? Leave this empty and set the JOBHUNTER_AI_API_KEY environment variable instead (docker: in your .env file). Leave the box empty to keep the saved key. |
+| Model | `ai.model` | `claude-opus-5-5` | Default claude-opus-5-5 (most capable). Cheaper options exist, e.g. claude-sonnet-5-5; use any model id your key can access. |
 
 ## Schedule
 

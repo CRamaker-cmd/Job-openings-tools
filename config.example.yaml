@@ -75,14 +75,16 @@ profile:
     "DevOps": 1
 
 search:
-  min_salary: 90000          # yearly EUR; postings that state less are dropped
+  countries: [NL]            # which countries to search; each gets a row in pay_by_country (Settings -> Matching)
+  # Minimum yearly gross pay per country, in THAT country's own currency:
+  #   min = postings that state less are dropped
+  #   big = the lower minimum for big companies (tier 1 below): worth a bit less pay for the career potential, any title
+  # Rows for new countries are added for you (converted from this one) when you tick the country in the dashboard.
+  pay_by_country:
+    NL: {min: 90000, big: 70000}
+  big_company_tiers: [1]     # [] switches the lower big-company minimum off; [1, 2] also includes tier-2 companies
   max_years_required: 4      # drop postings asking for more years than this
   max_age_days: 60
-  # Big companies (tier 1 below) are worth a bit less pay for the career potential: for them the minimum
-  # is big_company_min_salary instead of min_salary - for ANY title, junior or not.
-  # big_company_tiers: [] switches this off; [1, 2] also includes tier-2 companies.
-  big_company_tiers: [1]
-  big_company_min_salary: 70000
   include_remote: false      # true = also keep "Remote" postings (any country)
   # title_too_senior etc. have sensible defaults - see jobhunter/config.py
 

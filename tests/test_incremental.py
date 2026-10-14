@@ -1,6 +1,7 @@
 """Only new postings cost anything; known and previously rejected ones are skipped."""
 import pytest
 
+from helpers import set_pay
 from jobhunter.config import load_config
 from jobhunter.db import DB
 from jobhunter.models import RawJob
@@ -99,11 +100,11 @@ def test_rescore_applies_new_rules_locally(env):
     rows = {r["title"]: r for r in db.list_jobs(pay="all")}
     db.set_status(rows["Backend Engineer"]["id"], "starred")
     cfg["search"]["big_company_tiers"] = []              # (Src labels everything "Adyen", a big company: switch that exception off)
-    cfg["search"]["min_salary"] = 99000                  # raise the bar: both postings still reach it (max 100k / 99k)
+    set_pay(cfg, "NL", min=99000)                  # raise the bar: both postings still reach it (max 100k / 99k)
     done, moved = rescore(cfg, db)
     after = {r["title"]: r["status"] for r in db.list_jobs(status="all", pay="all")}
     assert after["Software Engineer"] == "new" and done == 2                            # both still pass
-    cfg["search"]["min_salary"] = 120000                 # now neither does
+    set_pay(cfg, "NL", min=120000)                 # now neither does
     done, moved = rescore(cfg, db)
     after = {r["title"]: r["status"] for r in db.list_jobs(status="all", pay="all")}
     assert moved == 1 and after["Software Engineer"] == "hidden" and after["Backend Engineer"] == "starred"  # starred is never moved

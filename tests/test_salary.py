@@ -1,3 +1,4 @@
+from helpers import set_pay
 from jobhunter.config import load_config
 from jobhunter.db import DB
 from jobhunter.filters import evaluate
@@ -108,5 +109,6 @@ def test_big_company_accepts_somewhat_lower_pay_for_any_title():
     # switch off / change
     cfg["search"]["big_company_tiers"] = []
     assert evaluate(job("Booking.com"), cfg, estimate=low).pay_confidence == "low"
-    cfg["search"]["big_company_tiers"], cfg["search"]["big_company_min_salary"] = [1], 85000
+    cfg["search"]["big_company_tiers"] = [1]
+    set_pay(cfg, "NL", big=85000)
     assert evaluate(job("Booking.com"), cfg, estimate=low).pay_confidence == "low"

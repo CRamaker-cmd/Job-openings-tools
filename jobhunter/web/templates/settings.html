@@ -8,7 +8,19 @@
  <p class="meta">Saved in the app's database and applied immediately. The port and file locations stay in <code>config.yaml</code> (changing them needs a restart).</p></aside>
 <section>
 <h2 style="margin-top:0">{{ sec.title }}</h2>
-<p class="meta">{{ sec.intro }}</p>
+<p class="meta">{{ sec.intro|safe }}</p>
+{% if sec.id == 'profile' %}
+<div class="card" id="cv-card"><h3 style="margin-top:0">Your CV</h3>
+ {% if cfg_profile.cv_filename %}<p>📄 <b>{{ cfg_profile.cv_filename }}</b> · {{ cfg_profile.cv_text.split()|length }} words read
+  · <a href="{{ url_for('cv_file') }}">download</a></p>{% else %}<p class="meta">No CV yet. Upload a PDF, Word (.docx), .txt or .md file: it is stored on your own drive and its text is read so your AI agent can use it.</p>{% endif %}
+ <form method="post" action="{{ url_for('cv_upload') }}" enctype="multipart/form-data" class="row">
+  <input type="file" name="cv" accept=".pdf,.docx,.txt,.md" required>
+  <button class="primary">{{ 'Replace CV' if cfg_profile.cv_filename else 'Upload CV' }}</button>
+  {% if cfg_profile.cv_filename %}<button formaction="{{ url_for('cv_remove') }}" formnovalidate onclick="return confirm('Remove your CV?')">Remove</button>{% endif %}
+ </form>
+ <p class="meta">Max 5 MB. Scanned (image-only) PDFs can't be read: paste the text into the CV text box instead.</p>
+</div>
+{% endif %}
 <form method="post">
 {% for r in rows %}{% set f = r.f %}
  {% if f.group %}<h3 class="grp">{{ f.group }}</h3>{% endif %}
@@ -17,11 +29,25 @@
   {% if f.kind == 'bool' %}<label class="chk"><input type="checkbox" id="{{ f.path }}" name="{{ f.path }}" {{ 'checked' if r.value }}> Yes</label>
   {% elif f.kind in ('int','float') %}<div class="num"><input id="{{ f.path }}" name="{{ f.path }}" value="{{ r.text }}" inputmode="decimal" size="10"> <span class="meta">{{ f.unit }}</span></div>
   {% elif f.kind == 'text' %}<input id="{{ f.path }}" name="{{ f.path }}" value="{{ r.text }}" placeholder="{{ f.placeholder }}" style="width:100%">
+  {% elif f.kind == 'secret' %}<input type="password" id="{{ f.path }}" name="{{ f.path }}" value="" autocomplete="new-password" style="width:100%" placeholder="{{ '•••••••••••• a key is saved (leave empty to keep it)' if r.has_value else 'paste your API key' }}">
+   {% if r.has_value %}<label class="chk"><input type="checkbox" name="{{ f.path }}__clear"> Remove the saved key</label>{% endif %}
+   {% if ai_env_key %}<div class="help">✅ A key is also available from the server's environment (JOBHUNTER_AI_API_KEY / ANTHROPIC_API_KEY); it is used first.</div>{% endif %}
+  {% elif f.kind == 'pay_table' %}
+  <table class="paytable"><tr><th>Country</th><th>Minimum pay</th><th>Minimum for big companies</th></tr>
+  {% for pr in pay_rows %}<tr class="payrow" data-code="{{ pr.c.code }}" {{ 'hidden' if not pr.ticked }}>
+   <td>{{ pr.c.flag }} {{ pr.c.name }}</td>
+   <td><span class="cur">{{ pr.symbol }}</span> <input name="pay.{{ pr.c.code }}.min" value="{{ pr.min }}" inputmode="numeric" size="9" {{ 'disabled' if not pr.ticked }}> <span class="meta">/ year</span></td>
+   <td><span class="cur">{{ pr.symbol }}</span> <input name="pay.{{ pr.c.code }}.big" value="{{ pr.big }}" inputmode="numeric" size="9" {{ 'disabled' if not pr.ticked }}> <span class="meta">/ year</span></td></tr>{% endfor %}
+  </table>
+  <script>
+  (function(){const boxes=document.querySelectorAll('input[name="search.countries"]');
+   function sync(){boxes.forEach(b=>{const row=document.querySelector('.payrow[data-code="'+b.value+'"]');if(!row)return;row.hidden=!b.checked;row.querySelectorAll('input').forEach(i=>i.disabled=!b.checked)})}
+   boxes.forEach(b=>b.addEventListener('change',sync));sync()})();
+  </script>
   {% elif f.kind == 'select' %}<select id="{{ f.path }}" name="{{ f.path }}">{% for val, lab in f.choices %}<option value="{{ val }}" {{ 'selected' if val == r.value }}>{{ lab }}</option>{% endfor %}</select>
   {% elif f.kind == 'choices' %}{% for val, lab in f.choices %}<label class="chk"><input type="checkbox" name="{{ f.path }}" value="{{ val }}" {{ 'checked' if val in r.value }}> {{ lab }}</label>{% endfor %}
-  {% else %}<textarea id="{{ f.path }}" name="{{ f.path }}" rows="{{ [[r.text.count('\n') + 2, 3]|max, 14]|min if f.kind != 'textarea' else 8 }}" spellcheck="false" {{ 'class=mono' if f.kind in ('regex_lines','benchmarks','skills','achievements','fx','country_salaries') }}>{{ r.text }}</textarea>{% endif %}
-  {% if f.help %}<div class="help">{{ f.help }}</div>{% endif %}
-  {% if f.kind == 'country_salaries' %}<div class="help"><b>Your countries and their currency:</b> {% for c in picked %}{{ c.flag }} <code>{{ c.code }}</code> = {{ c.currency }}{{ ' · ' if not loop.last }}{% endfor %}</div>{% endif %}
+  {% else %}<textarea id="{{ f.path }}" name="{{ f.path }}" rows="{{ [[r.text.count('\n') + 2, 3]|max, 14]|min if f.kind != 'textarea' else 8 }}" spellcheck="false" {{ 'class=mono' if f.kind in ('regex_lines','benchmarks','skills','achievements','fx') }}>{{ r.text }}</textarea>{% endif %}
+  {% if f.help %}<div class="help">{{ f.help|safe }}</div>{% endif %}
   {% if r.default_text and r.modified %}<div class="help">Default: {{ r.default_text }}{{ ' ' + f.unit if f.unit }}</div>{% endif %}
  </div>
 {% endfor %}

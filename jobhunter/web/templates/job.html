@@ -24,12 +24,23 @@
   <label class="f"><span>Language</span><select name="lang" onchange="this.form.submit()"><option value="" {{ 'selected' if lang=='auto' }}>Automatic ({{ 'Dutch' if letter.language=='nl' else 'English' }})</option><option value="en" {{ 'selected' if lang=='en' }}>English</option><option value="nl" {{ 'selected' if lang=='nl' }}>Nederlands</option></select></label>
   <a class="btn" href="{{ url_for('job_page', job_id=job.id, v=letter.seed + 1, lang=(lang if lang!='auto' else None)) }}" title="Same facts, different wording and a different pick of achievements">↻ Another angle</a>
  </form>
- <textarea id="letter" style="min-height:430px" oninput="document.getElementById('lw').textContent=this.value.trim().split(/\s+/).length">{{ letter.text }}</textarea>
+ <textarea id="letter" style="min-height:430px" oninput="letterChanged()">{{ letter.text }}</textarea>
  <div class="row" style="margin-top:8px"><button class="primary" onclick="copyLetter(this)">Copy letter</button>
   <button onclick="copyText('aiprompt',this)" title="A ready prompt with the job text and your facts: paste it into any AI chat (free) for a polished version">Copy prompt for an AI assistant</button>
   <span class="meta"><span id="lw">{{ letter.words }}</span> words · {{ 'Dutch' if letter.language=='nl' else 'English' }}</span></div>
  <textarea id="aiprompt" style="display:none">{{ ai_prompt }}</textarea>
- <div class="flash info" style="margin-top:10px">⚠ <b>Replace the [bracketed] sentence</b> with one real sentence on why you want to work at <i>{{ job.company }}</i> (a product, project or team you read about).
+ {% if ai_ready %}
+ <div class="agentbox"><b>✨ AI agent</b> <span class="meta">({{ ai_model }})</span>
+  <textarea id="agent-extra" rows="2" placeholder="Optional: tell the agent anything specific, e.g. why you like {{ job.company }}, what to emphasise, a detail to mention…"></textarea>
+  <div class="row"><button class="primary" id="agent-btn" onclick="agentCustomize({{ job.id }})">✨ Agent Customize</button>
+   <button id="agent-undo" onclick="agentUndo()" hidden>↩ Back to the template draft</button>
+   <span class="meta" id="agent-status"></span></div>
+  <div class="meta">Sends this posting, your profile, achievements{% if has_cv %} and CV text{% endif %} to Anthropic to write the letter; the result fills the box above for you to check.{% if not has_cv %} <a href="{{ url_for('settings_page', section='profile') }}">Upload your CV</a> for better results.{% endif %}</div>
+ </div>
+ {% else %}
+ <div class="meta" style="margin-top:8px">Want a fully customised letter? <a href="{{ url_for('settings_page', section='ai') }}">Connect an AI agent</a> (optional) and an <b>Agent Customize</b> button appears here.</div>
+ {% endif %}
+ <div class="flash info" id="bracket-warning" style="margin-top:10px">⚠ <b>Replace the [bracketed] sentence</b> with one real sentence on why you want to work at <i>{{ job.company }}</i> (a product, project or team you read about).
   That one sentence is what no template can write, and it matters most.</div>
  <details style="margin-top:8px"><summary>What this letter picked up from the posting, and how to make it better</summary>
   <ul>
@@ -47,4 +58,23 @@
  <textarea id="notes" style="min-height:80px" placeholder="Contact person, interview dates, questions… (saved automatically)" onblur="post('/api/job/{{ job.id }}/notes',{notes:this.value})">{{ job.notes }}</textarea></div>
 <div class="card"><h3 style="margin-top:0">Description</h3>
  <pre class="desc">{{ job.description or 'No description captured — open the posting.' }}</pre></div>
+<script>
+function letterChanged(){const t=document.getElementById('letter').value;document.getElementById('lw').textContent=t.trim().split(/\s+/).length;
+ const w=document.getElementById('bracket-warning');if(w)w.hidden=!/\[[^\]]+\]/.test(t)}
+let agentBackup=null;
+async function agentCustomize(id){
+ const btn=document.getElementById('agent-btn'),st=document.getElementById('agent-status'),box=document.getElementById('letter');
+ btn.disabled=true;st.className='meta';st.textContent='Writing… this takes 10–60 seconds';
+ try{
+  const r=await fetch('/api/job/'+id+'/agent',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({extra:document.getElementById('agent-extra').value,lang:document.querySelector('select[name=lang]').value})});
+  const j=await r.json();
+  if(!j.ok){st.textContent='⚠ '+j.error;st.className='meta fail';return}
+  if(agentBackup===null)agentBackup=box.value;
+  box.value=j.letter;letterChanged();document.getElementById('agent-undo').hidden=false;
+  st.textContent='✓ Written by '+j.model+' ('+j.tokens.in+' in / '+j.tokens.out+' out tokens). Read it through before using it.'+(j.tidied?' (The agent added some extra text, which was removed.)':'');st.className='meta ok';
+ }catch(e){st.textContent='⚠ '+e;st.className='meta fail'}finally{btn.disabled=false}
+}
+function agentUndo(){if(agentBackup!==null){const box=document.getElementById('letter');box.value=agentBackup;letterChanged();document.getElementById('agent-undo').hidden=true;agentBackup=null}}
+</script>
 {% endblock %}

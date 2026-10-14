@@ -29,7 +29,7 @@ Docker installation and **keeping everything on an external drive**: the step-by
 Each company is refreshed **once a day**, **one at a time** (about one an hour), at the **lowest CPU priority**, and only
 **new** job postings are processed: anything already saved is skipped, and a role that a company re-opens for a new batch
 is recognised as new. In the container it is capped (1 core, 1 GB, `oom_score_adj` so it is stopped first if memory runs out)
-and idles at roughly **34 MB RAM / 0.02 % CPU**. See [docs/DOCKER.md](docs/DOCKER.md#made-for-a-shared-pi).
+and idles at roughly **60 MB RAM / 0.01 % CPU**. See [docs/DOCKER.md](docs/DOCKER.md#made-for-a-shared-pi).
 
 ## What you can do in the dashboard
 
@@ -58,7 +58,8 @@ and idles at roughly **34 MB RAM / 0.02 % CPU**. See [docs/DOCKER.md](docs/DOCKE
   a €70k floor (any job title). Both numbers are settings.
 - **Applying**: the app does **not** auto-submit applications; it opens the company's page and gives you a motivation letter
   built from your own facts (specific to the posting, honest about skill gaps, English or Dutch), your snippets and tracking.
-- **Several countries**: tick the countries to search; each has its own minimum salary in its own currency; the Jobs page gets a country filter.
+- **Several countries**: tick the countries to search; each gets its own row in the pay table (minimum pay and big-company minimum, in its own currency, prefilled by converting your current one); the Jobs page gets a country filter.
+- **AI agent (optional)**: upload your CV, add an Anthropic API key, and press **✨ Agent Customize** on a job: the posting, your facts and CV go to the Claude API and the reply (strictly the letter) fills the letter box for you to check. Off by default; nothing is sent otherwise.
 - **Salaries**: monthly figures become yearly (× 12 + 8% holiday pay in NL, bonus if stated), other currencies are converted; unknown pay is
   retried later and shown as "pay unknown". Details in the [user guide](docs/USER_GUIDE.md#3-applying).
 

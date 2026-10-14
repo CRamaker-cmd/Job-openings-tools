@@ -54,6 +54,19 @@ matching rule clears that memory.
 ## Docker: "bind source path does not exist"
 The data folder you set in `.env` (`JOBHUNTER_DATA`) doesn't exist. This is intentional protection: the container won't start rather than write to the SD card. Run `./deploy/check-drive.sh` — it says whether the folder is missing, whether the drive is mounted somewhere else, the filesystem type and the owner. Then `docker compose up -d` (no rebuild needed). See [SETUP_PI.md](SETUP_PI.md).
 
+## Agent Customize: errors
+| Message | Cause and fix |
+|---|---|
+| "The API key was rejected" | Wrong or revoked key: paste it again in Settings → AI agent (an environment variable `JOBHUNTER_AI_API_KEY` takes priority over the saved key; check it too). |
+| "The model ... was not found" / "not allowed to use that model" | Fix the model name in Settings → AI agent, or use a model your key has access to. |
+| "Rate limited" | Wait the number of seconds shown and try again. |
+| "Could not reach the API" | No internet from the Pi/container, or a timeout (a letter can take up to a minute). |
+| "The agent's answer didn't look like a letter" | Try again, or add a short instruction in the box (what to emphasise). |
+| No ✨ button on job pages | The agent is switched off, or there is no key (saved or in the environment). |
+
+## CV upload says "No readable text"
+The PDF is a scan or an image. Export a text-based PDF (or a .docx), or paste your CV text into the *CV text* box in Settings → Profile.
+
 ## Starting over
 Stop the app and delete `data/jobs.db` (this erases jobs, notes **and** dashboard settings). To only undo settings use the *Reset*
 buttons.
